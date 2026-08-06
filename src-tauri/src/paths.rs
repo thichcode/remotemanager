@@ -34,7 +34,3 @@ pub fn keys_dir() -> PathBuf {
 pub fn db_path() -> PathBuf {
     data_dir().join("data.db")
 }
-
-pub fn backup_dir() -> PathBuf {
-    data_dir().join("backups")
-}

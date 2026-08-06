@@ -22,7 +22,3 @@ pub fn init_connection() -> Connection {
     schema::migrate(&conn).expect("Failed to migrate database");
     conn
 }
-
-pub fn reinit_connection() -> Connection {
-    init_connection()
-}
