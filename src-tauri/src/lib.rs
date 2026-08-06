@@ -19,6 +19,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(state)
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::servers::cmd_create_server,
             commands::servers::cmd_update_server,

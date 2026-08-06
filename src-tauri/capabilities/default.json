@@ -4,6 +4,8 @@
   "description": "Default capabilities for Remote Manager",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "updater:default",
+    "dialog:default"
   ]
 }
