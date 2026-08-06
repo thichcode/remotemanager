@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore';
 import { modals } from '@mantine/modals';
 
 export function ServerForm() {
-  const { createServer, groups, credentials, loadCredentials } = useStore();
+  const { createServer, groups, credentials, sshKeys, loadCredentials, loadSshKeys } = useStore();
   const [name, setName] = useState('');
   const [host, setHost] = useState('');
   const [port, setPort] = useState(22);
@@ -14,9 +14,11 @@ export function ServerForm() {
   const [tags, setTags] = useState('');
   const [notes, setNotes] = useState('');
   const [credentialId, setCredentialId] = useState<string | null>(null);
+  const [sshKeyId, setSshKeyId] = useState<string | null>(null);
 
   useEffect(() => {
     loadCredentials();
+    if (useStore.getState().sshKeys.length === 0) loadSshKeys();
   }, []);
 
   const handleSubmit = async () => {
@@ -33,6 +35,7 @@ export function ServerForm() {
       notes: notes.trim(),
       favorite: false,
       credential_id: credentialId,
+      ssh_key_id: sshKeyId,
     });
 
     modals.closeAll();
@@ -94,6 +97,17 @@ export function ServerForm() {
         clearable
         searchable
       />
+      {protocol === 'ssh' && (
+        <Select
+          label="SSH Key"
+          placeholder="None"
+          data={sshKeys.map(k => ({ value: k.id, label: k.name }))}
+          value={sshKeyId}
+          onChange={setSshKeyId}
+          clearable
+          searchable
+        />
+      )}
       <TextInput
         label="Tags"
         placeholder="k8s, production"
