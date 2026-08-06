@@ -1,5 +1,6 @@
 mod commands;
 mod db;
+mod paths;
 mod security;
 
 use db::{AppState, init_connection};
