@@ -1,7 +1,10 @@
+mod backup;
 mod commands;
 mod db;
+mod history;
 mod paths;
 mod security;
+mod sshkeys;
 
 use db::{AppState, init_connection};
 
