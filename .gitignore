@@ -1,0 +1,26 @@
+# Dependencies
+node_modules
+dist
+dist-ssr
+
+# Tauri
+src-tauri/target
+src-tauri/Cargo.lock
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+
+# Debug
+*.log
+npm-debug.log*
