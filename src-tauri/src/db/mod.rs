@@ -10,11 +10,7 @@ pub struct AppState {
 }
 
 pub fn get_db_path() -> PathBuf {
-    let mut path = dirs::data_dir().expect("Failed to get data directory");
-    path.push("remote-manager");
-    std::fs::create_dir_all(&path).ok();
-    path.push("data.db");
-    path
+    crate::paths::db_path()
 }
 
 pub fn init_connection() -> Connection {
@@ -24,4 +20,8 @@ pub fn init_connection() -> Connection {
     conn.pragma_update(None, "foreign_keys", "ON").ok();
     schema::create_tables(&conn).expect("Failed to create tables");
     conn
+}
+
+pub fn reinit_connection() -> Connection {
+    init_connection()
 }
