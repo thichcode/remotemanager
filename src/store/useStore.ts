@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Server, Group, Credential, Settings } from '../types';
+import type { Server, Group, Credential, Settings, HistoryEntry, SshKey } from '../types';
 import * as api from '../services/tauri';
 
 interface AppState {
@@ -7,6 +7,8 @@ interface AppState {
   groups: Group[];
   credentials: Credential[];
   settings: Settings | null;
+  history: HistoryEntry[];
+  sshKeys: SshKey[];
   searchQuery: string;
   selectedGroupId: string | null;
   selectedServerId: string | null;
@@ -27,6 +29,11 @@ interface AppState {
   createCredential: (name: string, username: string, password: string) => Promise<void>;
   deleteCredential: (id: string) => Promise<void>;
   updateSettings: (settings: Partial<Settings>) => Promise<void>;
+  loadHistory: () => Promise<void>;
+  clearHistory: () => Promise<void>;
+  loadSshKeys: () => Promise<void>;
+  importSshKey: (path: string, name: string, passphrase?: string) => Promise<void>;
+  deleteSshKey: (id: string) => Promise<void>;
   setSearchQuery: (query: string) => void;
   setSelectedGroup: (id: string | null) => void;
   setSelectedServer: (id: string | null) => void;
@@ -37,6 +44,8 @@ export const useStore = create<AppState>((set, get) => ({
   groups: [],
   credentials: [],
   settings: null,
+  history: [],
+  sshKeys: [],
   searchQuery: '',
   selectedGroupId: null,
   selectedServerId: null,
@@ -124,6 +133,31 @@ export const useStore = create<AppState>((set, get) => ({
     const updated = { ...current, ...newSettings };
     await api.updateSettings(updated);
     set({ settings: updated });
+  },
+
+  loadHistory: async () => {
+    const history = await api.listHistory();
+    set({ history });
+  },
+
+  clearHistory: async () => {
+    await api.clearHistory();
+    set({ history: [] });
+  },
+
+  loadSshKeys: async () => {
+    const sshKeys = await api.listSshKeys();
+    set({ sshKeys });
+  },
+
+  importSshKey: async (path, name, passphrase) => {
+    await api.importSshKey(path, name, passphrase);
+    await get().loadSshKeys();
+  },
+
+  deleteSshKey: async (id) => {
+    await api.deleteSshKey(id);
+    await get().loadSshKeys();
   },
 
   setSearchQuery: (query) => set({ searchQuery: query }),
