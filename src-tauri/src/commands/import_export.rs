@@ -40,7 +40,7 @@ pub fn cmd_import_csv(state: State<AppState>, path: String) -> Result<(usize, Ve
                 }
 
                 let port = if protocol == "rdp" { 3389 } else { 22 };
-                match operations::create_server(&conn, &name, &host, port, &protocol, &username, None, "", "", None) {
+                match operations::create_server(&conn, &name, &host, port, &protocol, &username, None, "", "", None, None) {
                     Ok(_) => imported += 1,
                     Err(e) => errors.push(format!("Row {}: {}", i + 2, e)),
                 }
@@ -118,7 +118,7 @@ pub fn cmd_import_json(state: State<AppState>, path: String) -> Result<(usize, V
                 continue;
             }
 
-            match operations::create_server(&conn, &name, &host, port, &protocol, &username, None, &tags, &notes, None) {
+            match operations::create_server(&conn, &name, &host, port, &protocol, &username, None, &tags, &notes, None, None) {
                 Ok(_) => imported += 1,
                 Err(e) => errors.push(format!("Server {}: {}", i + 1, e)),
             }

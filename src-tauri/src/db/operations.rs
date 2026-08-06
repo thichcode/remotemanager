@@ -14,6 +14,7 @@ pub struct ServerRow {
     pub notes: String,
     pub favorite: bool,
     pub credential_id: Option<String>,
+    pub ssh_key_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -57,8 +58,9 @@ fn map_server_row(row: &rusqlite::Row) -> rusqlite::Result<ServerRow> {
         notes: row.get(8)?,
         favorite: row.get::<_, i32>(9)? != 0,
         credential_id: row.get(10)?,
-        created_at: row.get(11)?,
-        updated_at: row.get(12)?,
+        ssh_key_id: row.get(11)?,
+        created_at: row.get(12)?,
+        updated_at: row.get(13)?,
     })
 }
 
@@ -74,12 +76,13 @@ pub fn create_server(
     tags: &str,
     notes: &str,
     credential_id: Option<&str>,
+    ssh_key_id: Option<&str>,
 ) -> rusqlite::Result<String> {
     let id = Uuid::new_v4().to_string();
     conn.execute(
-        "INSERT INTO servers (id, name, host, port, protocol, username, group_id, tags, notes, credential_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-        params![id, name, host, port, protocol, username, group_id, tags, notes, credential_id],
+        "INSERT INTO servers (id, name, host, port, protocol, username, group_id, tags, notes, credential_id, ssh_key_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![id, name, host, port, protocol, username, group_id, tags, notes, credential_id, ssh_key_id],
     )?;
     Ok(id)
 }
@@ -96,11 +99,12 @@ pub fn update_server(
     tags: &str,
     notes: &str,
     credential_id: Option<&str>,
+    ssh_key_id: Option<&str>,
 ) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE servers SET name=?2, host=?3, port=?4, protocol=?5, username=?6, group_id=?7,
-         tags=?8, notes=?9, credential_id=?10, updated_at=datetime('now') WHERE id=?1",
-        params![id, name, host, port, protocol, username, group_id, tags, notes, credential_id],
+         tags=?8, notes=?9, credential_id=?10, ssh_key_id=?11, updated_at=datetime('now') WHERE id=?1",
+        params![id, name, host, port, protocol, username, group_id, tags, notes, credential_id, ssh_key_id],
     )?;
     Ok(())
 }
@@ -113,7 +117,7 @@ pub fn delete_server(conn: &Connection, id: &str) -> rusqlite::Result<()> {
 pub fn get_server(conn: &Connection, id: &str) -> rusqlite::Result<Option<ServerRow>> {
     conn.query_row(
         "SELECT id, name, host, port, protocol, username, group_id, tags, notes, favorite,
-                credential_id, created_at, updated_at FROM servers WHERE id=?1",
+                credential_id, ssh_key_id, created_at, updated_at FROM servers WHERE id=?1",
         [id],
         map_server_row,
     ).optional()
@@ -122,10 +126,10 @@ pub fn get_server(conn: &Connection, id: &str) -> rusqlite::Result<Option<Server
 pub fn list_servers(conn: &Connection, group_id: Option<&str>) -> rusqlite::Result<Vec<ServerRow>> {
     let query = match group_id {
         Some(_) => "SELECT id, name, host, port, protocol, username, group_id, tags, notes, favorite,
-                     credential_id, created_at, updated_at FROM servers WHERE group_id = ?1
+                     credential_id, ssh_key_id, created_at, updated_at FROM servers WHERE group_id = ?1
                      ORDER BY favorite DESC, name ASC",
         None => "SELECT id, name, host, port, protocol, username, group_id, tags, notes, favorite,
-                 credential_id, created_at, updated_at FROM servers ORDER BY favorite DESC, name ASC",
+                 credential_id, ssh_key_id, created_at, updated_at FROM servers ORDER BY favorite DESC, name ASC",
     };
 
     let mut stmt = conn.prepare(query)?;
@@ -154,7 +158,7 @@ pub fn search_servers(conn: &Connection, query: &str) -> rusqlite::Result<Vec<Se
     let pattern = format!("%{}%", query.to_lowercase());
     let mut stmt = conn.prepare(
         "SELECT id, name, host, port, protocol, username, group_id, tags, notes, favorite,
-                credential_id, created_at, updated_at
+                credential_id, ssh_key_id, created_at, updated_at
          FROM servers
          WHERE LOWER(name) LIKE ?1 OR LOWER(host) LIKE ?1 OR LOWER(tags) LIKE ?1
          ORDER BY favorite DESC, name ASC",
@@ -278,6 +282,138 @@ pub fn update_settings(
     conn.execute(
         "UPDATE settings SET theme=?1, font_size=?2, ssh_port=?3, rdp_fullscreen=?4, rdp_admin_mode=?5 WHERE id=1",
         params![theme, font_size, ssh_port, rdp_fullscreen as i32, rdp_admin_mode as i32],
+    )?;
+    Ok(())
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct HistoryRow {
+    pub id: String,
+    pub server_id: Option<String>,
+    pub server_name: String,
+    pub host: String,
+    pub port: Option<i32>,
+    pub protocol: String,
+    pub username: String,
+    pub ssh_key_id: Option<String>,
+    pub connected_at: String,
+    pub status: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct SshKeyRow {
+    pub id: String,
+    pub name: String,
+    pub public_key: String,
+    pub created_at: String,
+}
+
+pub fn record_history(
+    conn: &Connection,
+    server_id: Option<&str>,
+    server_name: &str,
+    host: &str,
+    port: Option<i32>,
+    protocol: &str,
+    username: &str,
+    ssh_key_id: Option<&str>,
+) -> rusqlite::Result<()> {
+    let id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO session_history (id, server_id, server_name, host, port, protocol, username, ssh_key_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![id, server_id, server_name, host, port, protocol, username, ssh_key_id],
+    )?;
+    // Prune to newest 200
+    conn.execute(
+        "DELETE FROM session_history WHERE id NOT IN (
+            SELECT id FROM session_history ORDER BY connected_at DESC, id DESC LIMIT 200
+        )",
+        [],
+    )?;
+    Ok(())
+}
+
+pub fn list_history(conn: &Connection) -> rusqlite::Result<Vec<HistoryRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, server_id, server_name, host, port, protocol, username, ssh_key_id, connected_at, status
+         FROM session_history ORDER BY connected_at DESC, id DESC LIMIT 200",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(HistoryRow {
+            id: row.get(0)?,
+            server_id: row.get(1)?,
+            server_name: row.get(2)?,
+            host: row.get(3)?,
+            port: row.get(4)?,
+            protocol: row.get(5)?,
+            username: row.get(6)?,
+            ssh_key_id: row.get(7)?,
+            connected_at: row.get(8)?,
+            status: row.get(9)?,
+        })
+    })?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+pub fn clear_history(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM session_history", [])?;
+    Ok(())
+}
+
+pub fn create_ssh_key(
+    conn: &Connection,
+    name: &str,
+    private_key_path: &str,
+    public_key: &str,
+    passphrase: &str,
+) -> rusqlite::Result<String> {
+    let id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO ssh_keys (id, name, private_key, public_key, passphrase) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![id, name, private_key_path, public_key, passphrase],
+    )?;
+    Ok(id)
+}
+
+pub fn list_ssh_keys(conn: &Connection) -> rusqlite::Result<Vec<SshKeyRow>> {
+    let mut stmt = conn.prepare("SELECT id, name, public_key, created_at FROM ssh_keys ORDER BY name")?;
+    let rows = stmt.query_map([], |row| {
+        Ok(SshKeyRow {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            public_key: row.get(2)?,
+            created_at: row.get(3)?,
+        })
+    })?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+pub fn delete_ssh_key(conn: &Connection, id: &str) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM ssh_keys WHERE id=?1", [id])?;
+    Ok(())
+}
+
+pub fn get_ssh_key_private_path(conn: &Connection, id: &str) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT private_key FROM ssh_keys WHERE id=?1",
+        [id],
+        |row| row.get(0),
+    ).optional()
+}
+
+pub fn attach_key_to_server(conn: &Connection, server_id: &str, ssh_key_id: Option<&str>) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE servers SET ssh_key_id=?2, updated_at=datetime('now') WHERE id=?1",
+        params![server_id, ssh_key_id],
     )?;
     Ok(())
 }

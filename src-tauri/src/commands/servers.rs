@@ -13,6 +13,7 @@ pub fn cmd_create_server(
     tags: String,
     notes: String,
     credential_id: Option<String>,
+    ssh_key_id: Option<String>,
 ) -> Result<String, String> {
     if name.trim().is_empty() {
         return Err("Name is required".to_string());
@@ -26,7 +27,7 @@ pub fn cmd_create_server(
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     operations::create_server(
         &conn, &name, &host, port, &protocol, &username,
-        group_id.as_deref(), &tags, &notes, credential_id.as_deref(),
+        group_id.as_deref(), &tags, &notes, credential_id.as_deref(), ssh_key_id.as_deref(),
     ).map_err(|e| e.to_string())
 }
 
@@ -43,6 +44,7 @@ pub fn cmd_update_server(
     tags: String,
     notes: String,
     credential_id: Option<String>,
+    ssh_key_id: Option<String>,
 ) -> Result<(), String> {
     if name.trim().is_empty() {
         return Err("Name is required".to_string());
@@ -53,7 +55,7 @@ pub fn cmd_update_server(
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     operations::update_server(
         &conn, &id, &name, &host, port, &protocol, &username,
-        group_id.as_deref(), &tags, &notes, credential_id.as_deref(),
+        group_id.as_deref(), &tags, &notes, credential_id.as_deref(), ssh_key_id.as_deref(),
     ).map_err(|e| e.to_string())
 }
 
