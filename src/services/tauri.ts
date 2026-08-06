@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Server, Group, Credential, Settings } from '../types';
+import type { Server, Group, Credential, Settings, HistoryEntry, SshKey, BackupSummary } from '../types';
 
 // Servers
 export const createServer = (server: Server): Promise<string> =>
@@ -37,11 +37,25 @@ export const listGroups = (): Promise<Group[]> =>
   invoke('cmd_list_groups');
 
 // SSH / RDP
-export const launchSsh = (host: string, port: number, username: string): Promise<void> =>
-  invoke('cmd_launch_ssh', { host, port, username });
+export const launchSsh = (
+  host: string,
+  port: number,
+  username: string,
+  serverId?: string,
+  serverName?: string,
+  sshKeyId?: string | null
+): Promise<void> =>
+  invoke('cmd_launch_ssh', { host, port, username, serverId, serverName, sshKeyId });
 
-export const launchRdp = (host: string, username: string, fullscreen: boolean, adminMode: boolean): Promise<void> =>
-  invoke('cmd_launch_rdp', { host, username, fullscreen, adminMode });
+export const launchRdp = (
+  host: string,
+  username: string,
+  fullscreen: boolean,
+  adminMode: boolean,
+  serverId?: string,
+  serverName?: string
+): Promise<void> =>
+  invoke('cmd_launch_rdp', { host, username, fullscreen, adminMode, serverId, serverName });
 
 // Ping
 export const pingHost = (host: string): Promise<string> =>
@@ -79,3 +93,28 @@ export const getSettings = (): Promise<Settings> =>
 
 export const updateSettings = (settings: Settings): Promise<void> =>
   invoke('cmd_update_settings', { ...settings });
+
+export const isPortable = (): Promise<boolean> =>
+  invoke('cmd_is_portable');
+
+// History
+export const listHistory = (): Promise<HistoryEntry[]> =>
+  invoke('cmd_list_history');
+export const clearHistory = (): Promise<void> =>
+  invoke('cmd_clear_history');
+
+// SSH Keys
+export const importSshKey = (path: string, name: string, passphrase?: string): Promise<string> =>
+  invoke('cmd_import_ssh_key', { path, name, passphrase });
+export const listSshKeys = (): Promise<SshKey[]> =>
+  invoke('cmd_list_ssh_keys');
+export const deleteSshKey = (id: string): Promise<void> =>
+  invoke('cmd_delete_ssh_key', { id });
+export const attachKey = (serverId: string, sshKeyId?: string | null): Promise<void> =>
+  invoke('cmd_attach_key', { serverId, sshKeyId });
+
+// Backup/Restore
+export const backup = (path: string): Promise<BackupSummary> =>
+  invoke('cmd_backup', { path });
+export const restore = (path: string): Promise<void> =>
+  invoke('cmd_restore', { path });

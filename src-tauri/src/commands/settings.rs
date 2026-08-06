@@ -20,3 +20,8 @@ pub fn cmd_update_settings(
     operations::update_settings(&conn, &theme, font_size, ssh_port, rdp_fullscreen, rdp_admin_mode)
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn cmd_is_portable() -> bool {
+    crate::paths::is_portable()
+}

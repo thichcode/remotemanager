@@ -46,6 +46,7 @@ pub fn run() {
             commands::import_export::cmd_import_json,
             commands::settings::cmd_get_settings,
             commands::settings::cmd_update_settings,
+            commands::settings::cmd_is_portable,
             commands::backup::cmd_backup,
             commands::backup::cmd_restore,
             commands::history::cmd_list_history,

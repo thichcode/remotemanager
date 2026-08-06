@@ -1,19 +1,54 @@
-import { useEffect } from 'react';
-import { Stack, NumberInput, Select, Switch, Text, Divider } from '@mantine/core';
+import { useEffect, useState } from 'react';
+import { Stack, NumberInput, Select, Switch, Text, Divider, Button, Badge, Group } from '@mantine/core';
 import { useStore } from '../store/useStore';
+import { open, save } from '@tauri-apps/plugin-dialog';
+import { backup, restore, isPortable } from '../services/tauri';
+import { notifications } from '@mantine/notifications';
+import { UpdaterPanel } from './UpdaterPanel';
 
 export function Settings() {
   const { settings, loadSettings, updateSettings } = useStore();
+  const [portable, setPortable] = useState<boolean | null>(null);
 
   useEffect(() => {
     loadSettings();
+    isPortable().then(setPortable).catch(() => setPortable(false));
   }, []);
+
+  const handleBackup = async () => {
+    try {
+      const path = await save({ defaultPath: 'remote-manager-backup.rmbackup', filters: [{ name: 'Remote Manager Backup', extensions: ['rmbackup'] }] });
+      if (path) {
+        const summary = await backup(path);
+        notifications.show({ title: 'Backup Created', message: `${summary.db_size} bytes DB, ${summary.keys_count} keys`, color: 'green' });
+      }
+    } catch (e: any) {
+      notifications.show({ title: 'Backup Failed', message: e.toString(), color: 'red' });
+    }
+  };
+
+  const handleRestore = async () => {
+    try {
+      const path = await open({ multiple: false, filters: [{ name: 'Remote Manager Backup', extensions: ['rmbackup'] }] });
+      if (path) {
+        await restore(path);
+        notifications.show({ title: 'Restore Complete', message: 'Data restored. Restart the app to apply.', color: 'green' });
+      }
+    } catch (e: any) {
+      notifications.show({ title: 'Restore Failed', message: e.toString(), color: 'red' });
+    }
+  };
 
   if (!settings) return <Text>Loading...</Text>;
 
   return (
     <Stack gap="md" maw={500}>
-      <Text size="lg" fw={600}>Settings</Text>
+      <Group justify="space-between">
+        <Text size="lg" fw={600}>Settings</Text>
+        {portable !== null && (
+          <Badge color={portable ? 'teal' : 'gray'}>{portable ? 'Portable Mode' : 'Installed Mode'}</Badge>
+        )}
+      </Group>
 
       <Divider label="Appearance" labelPosition="center" />
       <Select
@@ -48,6 +83,15 @@ export function Settings() {
         checked={settings.rdp_admin_mode}
         onChange={(e) => updateSettings({ ...settings, rdp_admin_mode: e.currentTarget.checked })}
       />
+
+      <Divider label="Data" labelPosition="center" />
+      <Group>
+        <Button onClick={handleBackup}>Backup Data</Button>
+        <Button color="red" variant="light" onClick={handleRestore}>Restore from Backup</Button>
+      </Group>
+
+      <Divider label="Software Updates" labelPosition="center" />
+      <UpdaterPanel />
     </Stack>
   );
 }
