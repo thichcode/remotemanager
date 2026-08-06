@@ -44,6 +44,14 @@ pub fn run() {
             commands::import_export::cmd_import_json,
             commands::settings::cmd_get_settings,
             commands::settings::cmd_update_settings,
+            commands::backup::cmd_backup,
+            commands::backup::cmd_restore,
+            commands::history::cmd_list_history,
+            commands::history::cmd_clear_history,
+            commands::sshkeys::cmd_import_ssh_key,
+            commands::sshkeys::cmd_list_ssh_keys,
+            commands::sshkeys::cmd_delete_ssh_key,
+            commands::sshkeys::cmd_attach_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

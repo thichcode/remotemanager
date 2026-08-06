@@ -4,3 +4,6 @@ pub mod ssh;
 pub mod credentials;
 pub mod import_export;
 pub mod settings;
+pub mod backup;
+pub mod history;
+pub mod sshkeys;
