@@ -19,6 +19,7 @@ pub fn init_connection() -> Connection {
     conn.pragma_update(None, "journal_mode", "WAL").ok();
     conn.pragma_update(None, "foreign_keys", "ON").ok();
     schema::create_tables(&conn).expect("Failed to create tables");
+    schema::migrate(&conn).expect("Failed to migrate database");
     conn
 }
 

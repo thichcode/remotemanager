@@ -1,8 +1,19 @@
 use rusqlite::Connection;
 
 pub fn create_tables(conn: &Connection) -> rusqlite::Result<()> {
-    // Set schema version for future migrations
-    conn.pragma_update(None, "user_version", "1")?;
+    // Set schema version for future migrations (only on a fresh database so
+    // existing users keep their current version and migrations run once).
+    let fresh: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='groups'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|n| n == 0)
+        .unwrap_or(true);
+    if fresh {
+        conn.pragma_update(None, "user_version", "1")?;
+    }
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS groups (
@@ -64,6 +75,53 @@ pub fn create_tables(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_favorite ON servers(favorite)", [])?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_name ON servers(name)", [])?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_groups_parent ON groups(parent_id)", [])?;
+
+    Ok(())
+}
+
+pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
+    let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+
+    if version < 2 {
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS ssh_keys (
+                id            TEXT PRIMARY KEY,
+                name          TEXT NOT NULL,
+                private_key   TEXT NOT NULL,
+                public_key    TEXT DEFAULT '',
+                passphrase    TEXT DEFAULT '',
+                created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS session_history (
+                id            TEXT PRIMARY KEY,
+                server_id     TEXT,
+                server_name   TEXT NOT NULL,
+                host          TEXT NOT NULL,
+                port          INTEGER,
+                protocol      TEXT NOT NULL CHECK(protocol IN ('ssh','rdp')),
+                username      TEXT DEFAULT '',
+                ssh_key_id    TEXT,
+                connected_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                status        TEXT DEFAULT 'success'
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_history_connected ON session_history(connected_at DESC);
+            ",
+        )?;
+
+        // Guarded ALTER for ssh_key_id on servers
+        let cols: Vec<String> = conn
+            .prepare("PRAGMA table_info(servers)")?
+            .query_map([], |r| r.get::<_, String>(1))?
+            .collect::<Result<_, _>>()?;
+        if !cols.iter().any(|c| c == "ssh_key_id") {
+            conn.execute_batch("ALTER TABLE servers ADD COLUMN ssh_key_id TEXT;")?;
+        }
+
+        conn.pragma_update(None, "user_version", 2)?;
+    }
 
     Ok(())
 }
