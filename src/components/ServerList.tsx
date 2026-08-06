@@ -16,9 +16,9 @@ export function ServerList() {
   const handleConnect = async (server: typeof servers[0]) => {
     try {
       if (server.protocol === 'ssh') {
-        await launchSsh(server.host, server.port, server.username);
+        await launchSsh(server.host, server.port, server.username, server.id, server.name, server.ssh_key_id);
       } else {
-        await launchRdp(server.host, server.username, false, false);
+        await launchRdp(server.host, server.username, false, false, server.id, server.name);
       }
     } catch (e: any) {
       notifications.show({ title: 'Error', message: e.toString(), color: 'red' });
