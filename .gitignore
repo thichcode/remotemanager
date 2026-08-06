@@ -24,3 +24,9 @@ Thumbs.db
 # Debug
 *.log
 npm-debug.log*
+
+# Signing + backups
+src-tauri/.tauri-signing.key
+src-tauri/.tauri-signing.key.pub
+*.rmbackup
+src-tauri/gen/schemas
