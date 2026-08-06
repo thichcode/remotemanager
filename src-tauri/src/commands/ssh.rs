@@ -1,23 +1,51 @@
 use std::process::Command;
 
 #[tauri::command]
-pub fn cmd_launch_ssh(host: String, port: i32, username: String) -> Result<(), String> {
+pub fn cmd_launch_ssh(
+    state: tauri::State<crate::db::AppState>,
+    host: String,
+    port: i32,
+    username: String,
+    server_id: Option<String>,
+    server_name: Option<String>,
+    ssh_key_id: Option<String>,
+) -> Result<(), String> {
     validate_input(&host)?;
     validate_input(&username)?;
 
-    // Use wt.exe with default profile if available, fallback to ssh directly
-    let status = Command::new("wt.exe")
-        .args(["ssh", &format!("{}@{}", username, host), "-p", &port.to_string()])
-        .spawn();
+    // Resolve key path if attached
+    let mut extra_args: Vec<String> = Vec::new();
+    if let Some(kid) = ssh_key_id.as_deref() {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        if let Some(key_path) = crate::sshkeys::get_private_key_path(&conn, kid)? {
+            extra_args.push("-i".to_string());
+            extra_args.push(key_path);
+        }
+    }
+
+    // Record session history
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        let name = server_name.unwrap_or_else(|| host.clone());
+        let _ = crate::history::record(&conn, server_id.as_deref(), &name, &host, Some(port), "ssh", &username, ssh_key_id.as_deref());
+    }
+
+    // Build wt.exe command
+    let mut cmd = std::process::Command::new("wt.exe");
+    cmd.arg("ssh");
+    cmd.args(&extra_args);
+    cmd.args([&format!("{}@{}", username, host), "-p", &port.to_string()]);
+
+    let status = cmd.spawn();
 
     match status {
         Ok(_) => Ok(()),
         Err(_) => {
-            // Fallback: launch ssh directly in a new cmd window
-            Command::new("cmd")
-                .args(["/C", "start", "ssh", &format!("{}@{}", username, host), "-p", &port.to_string()])
-                .spawn()
-                .map_err(|e| format!("Failed to launch SSH: {}", e))?;
+            let mut fallback = std::process::Command::new("cmd");
+            fallback.args(["/C", "start", "ssh"]);
+            fallback.args(&extra_args);
+            fallback.args([&format!("{}@{}", username, host), "-p", &port.to_string()]);
+            fallback.spawn().map_err(|e| format!("Failed to launch SSH: {}", e))?;
             Ok(())
         }
     }
@@ -25,15 +53,24 @@ pub fn cmd_launch_ssh(host: String, port: i32, username: String) -> Result<(), S
 
 #[tauri::command]
 pub fn cmd_launch_rdp(
+    state: tauri::State<crate::db::AppState>,
     host: String,
     username: String,
     fullscreen: bool,
     admin_mode: bool,
+    server_id: Option<String>,
+    server_name: Option<String>,
 ) -> Result<(), String> {
     if host.trim().is_empty() {
         return Err("Host is required".to_string());
     }
     validate_input(&host)?;
+
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        let name = server_name.unwrap_or_else(|| host.clone());
+        let _ = crate::history::record(&conn, server_id.as_deref(), &name, &host, Some(3389), "rdp", &username, None);
+    }
 
     let mut rdp_content = format!(
         "full address:s:{}\r\nusername:s:{}\r\nscreen mode id:i:{}\r\n",
