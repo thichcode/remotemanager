@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Stack, NumberInput, Select, Switch, Text, Divider, Button, Badge, Group } from '@mantine/core';
+import { Stack, NumberInput, Select, Switch, Text, Divider, Button, Badge, Group, Alert } from '@mantine/core';
 import { useStore } from '../store/useStore';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { backup, restore, isPortable } from '../services/tauri';
 import { notifications } from '@mantine/notifications';
 import { UpdaterPanel } from './UpdaterPanel';
+import { IconShieldLock } from '@tabler/icons-react';
 
 export function Settings() {
   const { settings, loadSettings, updateSettings } = useStore();
@@ -31,8 +32,13 @@ export function Settings() {
     try {
       const path = await open({ multiple: false, filters: [{ name: 'Remote Manager Backup', extensions: ['rmbackup'] }] });
       if (path) {
-        await restore(path);
-        notifications.show({ title: 'Restore Complete', message: 'Data restored. Restart the app to apply.', color: 'green' });
+        const safetyDir = await restore(path);
+        notifications.show({
+          title: 'Restore Complete',
+          message: `Data restored. Restart the app to apply. A copy of your previous data is kept at: ${safetyDir}`,
+          color: 'green',
+          autoClose: 10000,
+        });
       }
     } catch (e: any) {
       notifications.show({ title: 'Restore Failed', message: e.toString(), color: 'red' });
@@ -85,10 +91,17 @@ export function Settings() {
       />
 
       <Divider label="Data" labelPosition="center" />
+      <Alert icon={<IconShieldLock size={16} />} title="Credential portability" color="yellow" variant="light">
+        Stored passwords are encrypted with Windows DPAPI, which is tied to this Windows user account and machine.
+        A backup restored on a different PC or user cannot decrypt saved credentials — re-enter passwords after moving machines.
+      </Alert>
       <Group>
         <Button onClick={handleBackup}>Backup Data</Button>
         <Button color="red" variant="light" onClick={handleRestore}>Restore from Backup</Button>
       </Group>
+      <Text size="xs" c="dimmed">
+        An automatic daily backup is saved to the data folder (backups/) and the last 7 are retained.
+      </Text>
 
       <Divider label="Software Updates" labelPosition="center" />
       <UpdaterPanel />

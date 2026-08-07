@@ -46,9 +46,10 @@ export const launchSsh = (
   username: string,
   serverId?: string,
   serverName?: string,
-  sshKeyId?: string | null
+  sshKeyId?: string | null,
+  credentialId?: string | null
 ): Promise<void> =>
-  invoke('cmd_launch_ssh', { host, port, username, serverId, serverName, sshKeyId });
+  invoke('cmd_launch_ssh', { host, port, username, serverId, serverName, sshKeyId, credentialId });
 
 export const launchRdp = (
   host: string,
@@ -56,9 +57,10 @@ export const launchRdp = (
   fullscreen: boolean,
   adminMode: boolean,
   serverId?: string,
-  serverName?: string
+  serverName?: string,
+  credentialId?: string | null
 ): Promise<void> =>
-  invoke('cmd_launch_rdp', { host, username, fullscreen, adminMode, serverId, serverName });
+  invoke('cmd_launch_rdp', { host, username, fullscreen, adminMode, serverId, serverName, credentialId });
 
 // Ping
 export const pingHost = (host: string): Promise<string> =>
@@ -73,9 +75,6 @@ export const deleteCredential = (id: string): Promise<void> =>
 
 export const listCredentials = (): Promise<Credential[]> =>
   invoke('cmd_list_credentials');
-
-export const getCredentialPassword = (id: string): Promise<string> =>
-  invoke('cmd_get_credential_password', { id });
 
 export const updateCredential = (
   id: string,

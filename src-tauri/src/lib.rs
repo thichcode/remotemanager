@@ -13,6 +13,8 @@ pub fn run() {
     env_logger::init();
 
     let conn = init_connection();
+    // Best-effort daily auto-backup (retain last 7). Never blocks startup on failure.
+    let _ = backup::auto_backup(&conn, 7);
     let state = AppState {
         db: std::sync::Mutex::new(conn),
     };
@@ -42,7 +44,6 @@ pub fn run() {
             commands::credentials::cmd_update_credential,
             commands::credentials::cmd_delete_credential,
             commands::credentials::cmd_list_credentials,
-            commands::credentials::cmd_get_credential_password,
             commands::credentials::cmd_test_credential,
             commands::import_export::cmd_import_csv,
             commands::import_export::cmd_export_csv,

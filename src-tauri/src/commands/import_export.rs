@@ -1,12 +1,13 @@
 use tauri::State;
 use crate::db::{AppState, operations};
+use crate::security::input::{validate_host, validate_username};
 use std::fs;
 
-fn validate_import_host(host: &str) -> Result<(), String> {
-    if host.contains(';') || host.contains('|') || host.contains('&') || host.contains('`') {
-        return Err("Host contains invalid characters".to_string());
+fn validate_import_port(port: i64) -> Result<i32, String> {
+    if port < 1 || port > 65535 {
+        return Err("Port must be between 1 and 65535".to_string());
     }
-    Ok(())
+    Ok(port as i32)
 }
 
 #[tauri::command]
@@ -23,14 +24,20 @@ pub fn cmd_import_csv(state: State<AppState>, path: String) -> Result<(usize, Ve
             Ok(record) => {
                 let name = record.get(0).unwrap_or("").trim().to_string();
                 let host = record.get(1).unwrap_or("").trim().to_string();
-                let protocol = record.get(2).unwrap_or("ssh").trim().to_string();
-                let username = record.get(3).unwrap_or("").trim().to_string();
+                // Export format: name,host,port,protocol,username,tags,notes
+                let raw_port = record.get(2).unwrap_or("").trim().to_string();
+                let protocol = record.get(3).unwrap_or("ssh").trim().to_string();
+                let username = record.get(4).unwrap_or("").trim().to_string();
 
                 if name.is_empty() || host.is_empty() {
                     errors.push(format!("Row {}: name and host required", i + 2));
                     continue;
                 }
-                if let Err(e) = validate_import_host(&host) {
+                if let Err(e) = validate_host(&host) {
+                    errors.push(format!("Row {}: {}", i + 2, e));
+                    continue;
+                }
+                if let Err(e) = validate_username(&username) {
                     errors.push(format!("Row {}: {}", i + 2, e));
                     continue;
                 }
@@ -39,7 +46,26 @@ pub fn cmd_import_csv(state: State<AppState>, path: String) -> Result<(usize, Ve
                     continue;
                 }
 
-                let port = if protocol == "rdp" { 3389 } else { 22 };
+                let port = if !raw_port.is_empty() {
+                    match raw_port.parse::<i64>() {
+                        Ok(p) => match validate_import_port(p) {
+                            Ok(valid) => valid,
+                            Err(e) => {
+                                errors.push(format!("Row {}: {}", i + 2, e));
+                                continue;
+                            }
+                        },
+                        Err(_) => {
+                            errors.push(format!("Row {}: invalid port '{}'", i + 2, raw_port));
+                            continue;
+                        }
+                    }
+                } else if protocol == "rdp" {
+                    3389
+                } else {
+                    22
+                };
+
                 match operations::create_server(&conn, &name, &host, port, &protocol, &username, None, "", "", "", None, None) {
                     Ok(_) => imported += 1,
                     Err(e) => errors.push(format!("Row {}: {}", i + 2, e)),
@@ -105,7 +131,6 @@ pub fn cmd_import_json(state: State<AppState>, path: String) -> Result<(usize, V
             let host = s["host"].as_str().unwrap_or("").trim().to_string();
             let protocol = s["protocol"].as_str().unwrap_or("ssh").trim().to_string();
             let username = s["username"].as_str().unwrap_or("").trim().to_string();
-            let port = s["port"].as_i64().unwrap_or(22) as i32;
             let tags = s["tags"].as_str().unwrap_or("").to_string();
             let notes = s["notes"].as_str().unwrap_or("").to_string();
 
@@ -113,10 +138,25 @@ pub fn cmd_import_json(state: State<AppState>, path: String) -> Result<(usize, V
                 errors.push(format!("Server {}: name and host required", i + 1));
                 continue;
             }
-            if let Err(e) = validate_import_host(&host) {
+            if let Err(e) = validate_host(&host) {
                 errors.push(format!("Server {}: {}", i + 1, e));
                 continue;
             }
+            if let Err(e) = validate_username(&username) {
+                errors.push(format!("Server {}: {}", i + 1, e));
+                continue;
+            }
+            if protocol != "ssh" && protocol != "rdp" {
+                errors.push(format!("Server {}: invalid protocol '{}'", i + 1, protocol));
+                continue;
+            }
+            let port = match validate_import_port(s["port"].as_i64().unwrap_or(if protocol == "rdp" { 3389 } else { 22 })) {
+                Ok(p) => p,
+                Err(e) => {
+                    errors.push(format!("Server {}: {}", i + 1, e));
+                    continue;
+                }
+            };
 
             match operations::create_server(&conn, &name, &host, port, &protocol, &username, None, &tags, &notes, "", None, None) {
                 Ok(_) => imported += 1,

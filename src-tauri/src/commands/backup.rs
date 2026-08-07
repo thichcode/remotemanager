@@ -9,6 +9,6 @@ pub fn cmd_backup(state: State<AppState>, path: String) -> Result<backup::Backup
 }
 
 #[tauri::command]
-pub fn cmd_restore(path: String) -> Result<(), String> {
+pub fn cmd_restore(path: String) -> Result<String, String> {
     backup::restore(&path)
 }

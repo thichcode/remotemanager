@@ -80,28 +80,41 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   createServer: async (server) => {
-    await api.createServer(server as Server);
-    await get().loadServers();
+    const id = await api.createServer(server as Server);
+    const created = { ...(server as Server), id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as Server;
+    set({ servers: [...get().servers, created] });
   },
 
   updateServer: async (id, server) => {
     await api.updateServer(id, server);
-    await get().loadServers();
+    set({ servers: get().servers.map(s => s.id === id ? { ...s, ...server, updated_at: new Date().toISOString() } : s) });
   },
 
   cloneServer: async (id) => {
-    await api.cloneServer(id);
-    await get().loadServers();
+    const newId = await api.cloneServer(id);
+    const src = get().servers.find(s => s.id === id);
+    if (src) {
+      const cloned = { ...src, id: newId, name: `${src.name} (copy)`, favorite: false, last_connected_at: null };
+      set({ servers: [...get().servers, cloned] });
+    } else {
+      await get().loadServers();
+    }
   },
 
   deleteServer: async (id) => {
     await api.deleteServer(id);
-    await get().loadServers();
+    set({ servers: get().servers.filter(s => s.id !== id) });
   },
 
   toggleFavorite: async (id) => {
+    const wasFavorite = get().servers.find(s => s.id === id)?.favorite ?? false;
     await api.toggleFavorite(id);
-    await get().loadServers();
+    const gid = get().selectedGroupId;
+    set({
+      servers: gid === '__favorites__' && wasFavorite
+        ? get().servers.filter(s => s.id !== id)
+        : get().servers.map(s => s.id === id ? { ...s, favorite: !s.favorite } : s),
+    });
   },
 
   searchServers: async (query) => {

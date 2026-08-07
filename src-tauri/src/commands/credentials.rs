@@ -70,15 +70,3 @@ pub fn cmd_test_credential(
     let password = security::decrypt(&encrypted)?;
     crate::security::net::test_ssh_auth(&host, port.unwrap_or(22), &row.username, Some(&password), None)
 }
-
-#[tauri::command]
-pub fn cmd_get_credential_password(state: State<AppState>, id: String) -> Result<String, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    let encrypted = operations::get_credential_password(&conn, &id)
-        .map_err(|e| e.to_string())?
-        .ok_or("Credential not found")?;
-    // SECURITY NOTE: This returns plaintext password over IPC.
-    // In production, consider using credential to auto-fill connection
-    // without exposing the password to the frontend.
-    security::decrypt(&encrypted)
-}

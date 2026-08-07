@@ -1,4 +1,5 @@
 pub mod dpapi;
+pub mod input;
 pub mod net;
 
 pub fn encrypt(plaintext: &str) -> Result<String, String> {

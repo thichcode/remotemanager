@@ -1,4 +1,27 @@
 use std::process::Command;
+use crate::security::input::{validate_host, validate_username};
+
+/// If the caller did not provide a username but a credential is attached,
+/// fill in the username from the credential vault. This avoids making the
+/// operator re-type a username they already saved.
+fn resolve_username(
+    state: &tauri::State<crate::db::AppState>,
+    username: String,
+    credential_id: Option<&str>,
+) -> Result<String, String> {
+    if !username.trim().is_empty() {
+        return Ok(username);
+    }
+    if let Some(cid) = credential_id {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        if let Some(meta) = crate::db::operations::get_credential_meta(&conn, cid)
+            .map_err(|e| e.to_string())?
+        {
+            return Ok(meta.username);
+        }
+    }
+    Ok(username)
+}
 
 #[tauri::command]
 pub fn cmd_launch_ssh(
@@ -9,9 +32,15 @@ pub fn cmd_launch_ssh(
     server_id: Option<String>,
     server_name: Option<String>,
     ssh_key_id: Option<String>,
+    credential_id: Option<String>,
 ) -> Result<(), String> {
-    validate_input(&host)?;
-    validate_input(&username)?;
+    validate_host(&host)?;
+    if port < 1 || port > 65535 {
+        return Err("Port must be between 1 and 65535".to_string());
+    }
+
+    let username = resolve_username(&state, username, credential_id.as_deref())?;
+    validate_username(&username)?;
 
     // Resolve key path if attached
     let mut extra_args: Vec<String> = Vec::new();
@@ -33,8 +62,10 @@ pub fn cmd_launch_ssh(
         }
     }
 
-    // Build wt.exe command. Options (-i, -p) MUST come before the host.
-    let mut cmd = std::process::Command::new("wt.exe");
+    // Build the ssh command. Windows Terminal forwards argv directly to ssh;
+    // this path never passes through a shell, so the whitelist above is the
+    // only command-injection surface and it is fully closed.
+    let mut cmd = Command::new("wt.exe");
     cmd.arg("ssh");
     cmd.args(&extra_args);
     cmd.arg("-o");
@@ -42,16 +73,22 @@ pub fn cmd_launch_ssh(
     cmd.args(["-p", &port.to_string()]);
     cmd.arg(format!("{}@{}", username, host));
 
-    let status = cmd.spawn();
-
-    match status {
+    match cmd.spawn() {
         Ok(_) => Ok(()),
         Err(_) => {
-            let mut fallback = std::process::Command::new("cmd");
-            fallback.args(["/C", "start", "ssh"]);
+            // Fallback for systems without Windows Terminal: spawn ssh.exe
+            // directly. We do NOT use `cmd /C start` because that is a shell
+            // and would reintroduce the injection surface.
+            let mut fallback = Command::new("ssh");
             fallback.args(&extra_args);
             fallback.args(["-o", "IdentitiesOnly=yes", "-p", &port.to_string()]);
             fallback.arg(format!("{}@{}", username, host));
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+                fallback.creation_flags(CREATE_NEW_CONSOLE);
+            }
             fallback.spawn().map_err(|e| format!("Failed to launch SSH: {}", e))?;
             Ok(())
         }
@@ -67,11 +104,11 @@ pub fn cmd_launch_rdp(
     admin_mode: bool,
     server_id: Option<String>,
     server_name: Option<String>,
+    credential_id: Option<String>,
 ) -> Result<(), String> {
-    if host.trim().is_empty() {
-        return Err("Host is required".to_string());
-    }
-    validate_input(&host)?;
+    validate_host(&host)?;
+    let username = resolve_username(&state, username, credential_id.as_deref())?;
+    validate_username(&username)?;
 
     {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
@@ -93,7 +130,13 @@ pub fn cmd_launch_rdp(
         rdp_content.push_str("administrative session:i:1\r\n");
     }
 
-    let temp_path = std::env::temp_dir().join(format!("rm_{}.rdp", host.replace('.', "_")));
+    // Build a safe temp filename from the validated host (host may contain
+    // IPv6 colons and brackets, which are invalid in Windows filenames).
+    let safe_host: String = host
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let temp_path = std::env::temp_dir().join(format!("rm_{}.rdp", safe_host));
     std::fs::write(&temp_path, rdp_content)
         .map_err(|e| format!("Failed to create RDP file: {}", e))?;
 
@@ -114,10 +157,7 @@ pub fn cmd_launch_rdp(
 
 #[tauri::command]
 pub fn cmd_ping(host: String) -> Result<String, String> {
-    if host.trim().is_empty() {
-        return Err("Host is required".to_string());
-    }
-    validate_input(&host)?;
+    validate_host(&host)?;
 
     let output = Command::new("ping")
         .args(["-n", "1", "-w", "3000", &host])
@@ -141,11 +181,4 @@ pub fn cmd_ping(host: String) -> Result<String, String> {
     } else {
         Ok("Unreachable".to_string())
     }
-}
-
-fn validate_input(input: &str) -> Result<(), String> {
-    if input.contains(';') || input.contains('|') || input.contains('&') || input.contains('`') {
-        return Err("Invalid characters in input".to_string());
-    }
-    Ok(())
 }

@@ -17,6 +17,8 @@ export function ServerList() {
   const [protocolFilter, setProtocolFilter] = useState<Protocol | 'all'>('all');
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
+  const [visibleCount, setVisibleCount] = useState(100);
+  const PAGE_SIZE = 100;
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -25,6 +27,10 @@ export function ServerList() {
     window.addEventListener('rm:filter-protocol', handler);
     return () => window.removeEventListener('rm:filter-protocol', handler);
   }, []);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [protocolFilter, selectedGroupId, servers.length]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -43,12 +49,15 @@ export function ServerList() {
     return true;
   });
 
+  const visibleServers = filteredServers.slice(0, visibleCount);
+  const hasMore = filteredServers.length > visibleCount;
+
   const handleConnect = async (server: typeof servers[0]) => {
     try {
       if (server.protocol === 'ssh') {
-        await launchSsh(server.host, server.port, server.username, server.id, server.name, server.ssh_key_id);
+        await launchSsh(server.host, server.port, server.username, server.id, server.name, server.ssh_key_id, server.credential_id);
       } else {
-        await launchRdp(server.host, server.username, false, false, server.id, server.name);
+        await launchRdp(server.host, server.username, false, false, server.id, server.name, server.credential_id);
       }
     } catch (e: any) {
       notifications.show({ title: 'Error', message: e.toString(), color: 'red' });
@@ -192,7 +201,7 @@ export function ServerList() {
           <Text c="dimmed">No servers match. Click + to add one.</Text>
         </Paper>
       ) : (
-        filteredServers.map(server => (
+        visibleServers.map(server => (
           <Paper key={server.id} p="md" withBorder>
             <Group justify="space-between">
               <Group>
@@ -251,6 +260,18 @@ export function ServerList() {
             </Group>
           </Paper>
         ))
+      )}
+
+      {hasMore && (
+        <Group justify="center">
+          <Button
+            variant="light"
+            size="xs"
+            onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+          >
+            Load more ({filteredServers.length - visibleCount} remaining)
+          </Button>
+        </Group>
       )}
 
       <Modal opened={exportModalOpen} onClose={() => setExportModalOpen(false)} title="Export Servers" centered>

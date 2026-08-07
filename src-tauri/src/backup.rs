@@ -73,7 +73,7 @@ pub fn create(conn: &rusqlite::Connection, target_path: &str) -> Result<BackupSu
     })
 }
 
-pub fn restore(target_path: &str) -> Result<(), String> {
+pub fn restore(target_path: &str) -> Result<String, String> {
     let file = fs::File::open(target_path).map_err(|e| format!("Failed to open backup: {}", e))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid backup file: {}", e))?;
 
@@ -85,7 +85,11 @@ pub fn restore(target_path: &str) -> Result<(), String> {
             manifest_ok = true;
             let mut content = String::new();
             entry.read_to_string(&mut content).map_err(|e| e.to_string())?;
-            let _: serde_json::Value = serde_json::from_str(&content).map_err(|e| format!("Bad manifest: {}", e))?;
+            let manifest: serde_json::Value =
+                serde_json::from_str(&content).map_err(|e| format!("Bad manifest: {}", e))?;
+            if manifest.get("schema_version").map(|v| v.as_i64().unwrap_or(0) > 3).unwrap_or(true) {
+                return Err("Backup schema is newer than this app version. Update Remote Manager first.".to_string());
+            }
             break;
         }
     }
@@ -98,25 +102,39 @@ pub fn restore(target_path: &str) -> Result<(), String> {
     let ts = chrono::Utc::now().format("%Y%m%d%H%M%S").to_string();
     let safety_dir = backup_parent.join(format!("data-backup-pre-restore-{}", ts));
 
-    // move current data dir aside
-    if data_dir.exists() {
-        fs::rename(&data_dir, &safety_dir).map_err(|e| format!("Failed to preserve current data: {}", e))?;
+    // Extract to a staging directory first, so we never touch live data until
+    // the archive is fully validated.
+    let staging_dir = backup_parent.join(format!("data-restore-staging-{}", ts));
+    if staging_dir.exists() {
+        fs::remove_dir_all(&staging_dir).map_err(|e| e.to_string())?;
     }
-    fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&staging_dir).map_err(|e| e.to_string())?;
 
-    // extract
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
         let name = entry.name().to_string();
         if name == "manifest.json" {
             continue;
         }
-        // sanitize
         let clean = name.trim_start_matches('/');
-        let dest = data_dir.join(clean);
-        if let Some(parent) = dest.parent() {
+        let dest = staging_dir.join(clean);
+
+        // CRITICAL: prevent zip-slip / path traversal. The destination must
+        // stay strictly inside the staging directory.
+        let canonical_base = fs::canonicalize(&staging_dir).map_err(|e| e.to_string())?;
+        let candidate = if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            fs::canonicalize(parent).unwrap_or_else(|_| parent.to_path_buf())
+        } else {
+            canonical_base.clone()
+        };
+        if !candidate.starts_with(&canonical_base) {
+            return Err(format!("Backup contains an unsafe path: {}", name));
         }
+        if dest.components().any(|c| matches!(c, std::path::Component::ParentDir | std::path::Component::RootDir | std::path::Component::Prefix(_))) {
+            return Err(format!("Backup contains an unsafe path: {}", name));
+        }
+
         if entry.is_dir() {
             continue;
         }
@@ -124,8 +142,87 @@ pub fn restore(target_path: &str) -> Result<(), String> {
         std::io::copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
     }
 
-    // delete safety dir after successful restore (data preserved only on failure)
-    let _ = fs::remove_dir_all(&safety_dir);
+    // Validate the restored DB before swapping: open it and run integrity check.
+    let staged_db = staging_dir.join("data.db");
+    if !staged_db.exists() {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return Err("Backup does not contain data.db".to_string());
+    }
+    {
+        let check = rusqlite::Connection::open(&staged_db)
+            .and_then(|c| c.query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0)));
+        match check {
+            Ok(s) if s.to_lowercase().starts_with("ok") => {}
+            Ok(s) => {
+                let _ = fs::remove_dir_all(&staging_dir);
+                return Err(format!("Restored database failed integrity check: {}", s));
+            }
+            Err(e) => {
+                let _ = fs::remove_dir_all(&staging_dir);
+                return Err(format!("Restored database could not be opened: {}", e));
+            }
+        }
+    }
 
-    Ok(())
+    // Swap: move current data dir aside (safety copy) and promote staging.
+    if data_dir.exists() {
+        if safety_dir.exists() {
+            fs::remove_dir_all(&safety_dir).map_err(|e| e.to_string())?;
+        }
+        fs::rename(&data_dir, &safety_dir).map_err(|e| format!("Failed to preserve current data: {}", e))?;
+    }
+    fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    for entry in fs::read_dir(&staging_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let target = data_dir.join(entry.file_name());
+        if target.exists() {
+            fs::remove_file(&target).map_err(|e| e.to_string())?;
+        }
+        fs::rename(entry.path(), &target).map_err(|e| e.to_string())?;
+    }
+    fs::remove_dir_all(&staging_dir).map_err(|e| e.to_string())?;
+
+    // The pre-restore copy is intentionally KEPT so a bad restore can be
+    // reverted by the operator. Surface its location in the message.
+    Ok(safety_dir.to_string_lossy().to_string())
+}
+
+/// Auto-backup: creates one backup per day into `data_dir/backups/` and
+/// retains at most `retain` most recent. Best-effort, never fails startup.
+pub fn auto_backup(conn: &rusqlite::Connection, retain: usize) -> Result<String, String> {
+    let backup_root = crate::paths::data_dir().join("backups");
+    fs::create_dir_all(&backup_root).map_err(|e| e.to_string())?;
+
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let target = backup_root.join(format!("auto-{}.rmbackup", date));
+
+    if target.exists() {
+        // A backup for today already exists.
+        prune_auto_backups(&backup_root, retain);
+        return Ok(target.to_string_lossy().to_string());
+    }
+
+    let result = create(conn, target.to_str().unwrap());
+    prune_auto_backups(&backup_root, retain);
+    result.map(|_| target.to_string_lossy().to_string())
+}
+
+fn prune_auto_backups(root: &Path, retain: usize) {
+    if retain == 0 {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    let mut files: Vec<std::path::PathBuf> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().map(|x| x == "rmbackup").unwrap_or(false))
+        .map(|e| e.path())
+        .collect();
+    files.sort();
+    // `files` sorted lexicographically == chronologically (YYYY-MM-DD prefix).
+    let overflow = files.len().saturating_sub(retain);
+    for f in files.iter().take(overflow) {
+        let _ = fs::remove_file(f);
+    }
 }
