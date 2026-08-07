@@ -123,5 +123,39 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.pragma_update(None, "user_version", 2)?;
     }
 
+    if version < 3 {
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS tags (
+                id       TEXT PRIMARY KEY,
+                name     TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS host_tags (
+                host_id  TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+                tag_id   TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+                PRIMARY KEY (host_id, tag_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_host_tags_tag ON host_tags(tag_id);
+            ",
+        )?;
+
+        // Guarded ALTERs
+        let cols: Vec<String> = conn
+            .prepare("PRAGMA table_info(servers)")?
+            .query_map([], |r| r.get::<_, String>(1))?
+            .collect::<Result<_, _>>()?;
+        if !cols.iter().any(|c| c == "description") {
+            conn.execute_batch("ALTER TABLE servers ADD COLUMN description TEXT DEFAULT '';")?;
+        }
+        if !cols.iter().any(|c| c == "last_connected_at") {
+            conn.execute_batch("ALTER TABLE servers ADD COLUMN last_connected_at TEXT;")?;
+        }
+
+        conn.pragma_update(None, "user_version", 3)?;
+    }
+
     Ok(())
 }

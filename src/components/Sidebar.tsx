@@ -1,10 +1,98 @@
-import { Box, Text, Group, ActionIcon, Stack, Divider } from '@mantine/core';
-import { IconPlus, IconServer, IconStar, IconClock, IconTrash } from '@tabler/icons-react';
+import { Box, Text, Group, ActionIcon, Stack, Divider, TextInput, Button } from '@mantine/core';
+import { IconPlus, IconServer, IconStar, IconClock, IconTrash, IconPencil, IconFolder, IconChevronRight } from '@tabler/icons-react';
 import { useStore } from '../store/useStore';
 import { useState } from 'react';
 import { launchSsh, launchRdp } from '../services/tauri';
 import { notifications } from '@mantine/notifications';
+import { modals } from '@mantine/modals';
 import type { HistoryEntry } from '../types';
+
+function GroupNode({ group, depth }: { group: { id: string; name: string }, depth: number }) {
+  const { selectedGroupId, setSelectedGroup, deleteGroup, updateGroup } = useStore();
+  const [addingChild, setAddingChild] = useState(false);
+  const [childName, setChildName] = useState('');
+
+  const handleRename = () => {
+    modals.open({
+      title: `Rename "${group.name}"`,
+      children: <RenameGroupForm currentName={group.name} onSave={(name) => updateGroup(group.id, name)} />,
+      size: 'sm',
+    });
+  };
+
+  const handleDelete = () => {
+    modals.openConfirmModal({
+      title: 'Delete Group',
+      children: <Text size="sm">Delete "{group.name}"? Servers in it will become ungrouped.</Text>,
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => deleteGroup(group.id),
+    });
+  };
+
+  const handleAddChild = async () => {
+    if (childName.trim()) {
+      await createChild(group.id, childName.trim());
+      setChildName('');
+      setAddingChild(false);
+    }
+  };
+
+  const { createGroup } = useStore();
+  const createChild = async (parentId: string, name: string) => {
+    await createGroup(name, parentId);
+  };
+
+  return (
+    <Box>
+      <Group
+        gap={6}
+        p="xs"
+        pl={depth * 12 + 8}
+        style={{ cursor: 'pointer', borderRadius: 4 }}
+        bg={selectedGroupId === group.id ? 'var(--mantine-color-dark-5)' : undefined}
+      >
+        <IconChevronRight size={12} />
+        <IconFolder size={14} />
+        <Text size="sm" style={{ flex: 1 }} onClick={() => setSelectedGroup(group.id)}>{group.name}</Text>
+        <ActionIcon size="sm" variant="subtle" onClick={() => setAddingChild(v => !v)}>
+          <IconPlus size={12} />
+        </ActionIcon>
+        <ActionIcon size="sm" variant="subtle" onClick={handleRename}>
+          <IconPencil size={12} />
+        </ActionIcon>
+        <ActionIcon size="sm" variant="subtle" color="red" onClick={handleDelete}>
+          <IconTrash size={12} />
+        </ActionIcon>
+      </Group>
+      {addingChild && (
+        <Group gap={6} pl={depth * 12 + 16} pb="xs">
+          <TextInput
+            size="xs"
+            placeholder="Sub-group name"
+            value={childName}
+            onChange={(e) => setChildName(e.currentTarget.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddChild(); }}
+            style={{ flex: 1 }}
+          />
+        </Group>
+      )}
+    </Box>
+  );
+}
+
+function RenameGroupForm({ currentName, onSave }: { currentName: string; onSave: (name: string) => void }) {
+  const [name, setName] = useState(currentName);
+  return (
+    <Stack>
+      <TextInput label="Group Name" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+      <Group justify="flex-end">
+        <Button variant="subtle" onClick={() => modals.closeAll()}>Cancel</Button>
+        <Button onClick={() => { onSave(name.trim()); modals.closeAll(); }} disabled={!name.trim()}>Save</Button>
+      </Group>
+    </Stack>
+  );
+}
 
 export function Sidebar() {
   const { groups, servers, selectedGroupId, setSelectedGroup, createGroup, history, clearHistory } = useStore();
@@ -51,6 +139,8 @@ export function Sidebar() {
             gap={8}
             p="xs"
             style={{ cursor: 'pointer', borderRadius: 4 }}
+            bg={selectedGroupId === '__favorites__' ? 'var(--mantine-color-dark-5)' : undefined}
+            onClick={() => setSelectedGroup('__favorites__')}
           >
             <IconStar size={16} />
             <Text size="sm">Favorites ({favorites.length})</Text>
@@ -96,18 +186,23 @@ export function Sidebar() {
           </ActionIcon>
         </Group>
 
-        {rootGroups.map(group => (
-          <Group
-            key={group.id}
-            gap={8}
-            p="xs"
-            style={{ cursor: 'pointer', borderRadius: 4 }}
-            bg={selectedGroupId === group.id ? 'var(--mantine-color-dark-5)' : undefined}
-            onClick={() => setSelectedGroup(group.id)}
-          >
-            <Text size="sm">{group.name}</Text>
-          </Group>
-        ))}
+        {newGroupName.length === 0 && (
+          <TextInput
+            size="xs"
+            placeholder="New group name + Enter"
+            value={newGroupName}
+            onChange={(e) => setNewGroupName(e.currentTarget.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddGroup(); }}
+          />
+        )}
+
+        {rootGroups.length === 0 ? (
+          <Text size="xs" c="dimmed" p="xs">No groups yet. Create one to organize servers.</Text>
+        ) : (
+          rootGroups.map(group => (
+            <GroupNode key={group.id} group={group} depth={0} />
+          ))
+        )}
       </Stack>
     </Box>
   );

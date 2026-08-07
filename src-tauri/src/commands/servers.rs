@@ -1,6 +1,13 @@
 use tauri::State;
 use crate::db::{AppState, operations};
 
+fn validate_port(port: i32) -> Result<(), String> {
+    if port < 1 || port > 65535 {
+        return Err("Port must be between 1 and 65535".to_string());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn cmd_create_server(
     state: State<AppState>,
@@ -12,6 +19,7 @@ pub fn cmd_create_server(
     group_id: Option<String>,
     tags: String,
     notes: String,
+    description: String,
     credential_id: Option<String>,
     ssh_key_id: Option<String>,
 ) -> Result<String, String> {
@@ -24,10 +32,11 @@ pub fn cmd_create_server(
     if protocol != "ssh" && protocol != "rdp" {
         return Err("Protocol must be ssh or rdp".to_string());
     }
+    validate_port(port)?;
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     operations::create_server(
         &conn, &name, &host, port, &protocol, &username,
-        group_id.as_deref(), &tags, &notes, credential_id.as_deref(), ssh_key_id.as_deref(),
+        group_id.as_deref(), &tags, &notes, &description, credential_id.as_deref(), ssh_key_id.as_deref(),
     ).map_err(|e| e.to_string())
 }
 
@@ -43,6 +52,7 @@ pub fn cmd_update_server(
     group_id: Option<String>,
     tags: String,
     notes: String,
+    description: String,
     credential_id: Option<String>,
     ssh_key_id: Option<String>,
 ) -> Result<(), String> {
@@ -52,11 +62,20 @@ pub fn cmd_update_server(
     if host.trim().is_empty() {
         return Err("Host is required".to_string());
     }
+    validate_port(port)?;
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     operations::update_server(
         &conn, &id, &name, &host, port, &protocol, &username,
-        group_id.as_deref(), &tags, &notes, credential_id.as_deref(), ssh_key_id.as_deref(),
+        group_id.as_deref(), &tags, &notes, &description, credential_id.as_deref(), ssh_key_id.as_deref(),
     ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn cmd_clone_server(state: State<AppState>, id: String) -> Result<String, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    operations::clone_server(&conn, &id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Server not found".to_string())
 }
 
 #[tauri::command]

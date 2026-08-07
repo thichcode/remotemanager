@@ -20,6 +20,7 @@ interface AppState {
   loadSettings: () => Promise<void>;
   createServer: (server: Omit<Server, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
   updateServer: (id: string, server: Partial<Server>) => Promise<void>;
+  cloneServer: (id: string) => Promise<void>;
   deleteServer: (id: string) => Promise<void>;
   toggleFavorite: (id: string) => Promise<void>;
   searchServers: (query: string) => Promise<void>;
@@ -27,6 +28,7 @@ interface AppState {
   updateGroup: (id: string, name: string) => Promise<void>;
   deleteGroup: (id: string) => Promise<void>;
   createCredential: (name: string, username: string, password: string) => Promise<void>;
+  updateCredential: (id: string, name: string, username: string, password?: string) => Promise<void>;
   deleteCredential: (id: string) => Promise<void>;
   updateSettings: (settings: Partial<Settings>) => Promise<void>;
   loadHistory: () => Promise<void>;
@@ -53,6 +55,11 @@ export const useStore = create<AppState>((set, get) => ({
 
   loadServers: async () => {
     const groupId = get().selectedGroupId;
+    if (groupId === '__favorites__') {
+      const all = await api.listServers(null);
+      set({ servers: all.filter(s => s.favorite) });
+      return;
+    }
     const servers = await api.listServers(groupId);
     set({ servers });
   },
@@ -79,6 +86,11 @@ export const useStore = create<AppState>((set, get) => ({
 
   updateServer: async (id, server) => {
     await api.updateServer(id, server);
+    await get().loadServers();
+  },
+
+  cloneServer: async (id) => {
+    await api.cloneServer(id);
     await get().loadServers();
   },
 
@@ -119,6 +131,11 @@ export const useStore = create<AppState>((set, get) => ({
 
   createCredential: async (name, username, password) => {
     await api.createCredential(name, username, password);
+    await get().loadCredentials();
+  },
+
+  updateCredential: async (id, name, username, password) => {
+    await api.updateCredential(id, name, username, password);
     await get().loadCredentials();
   },
 

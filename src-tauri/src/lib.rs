@@ -20,10 +20,12 @@ pub fn run() {
     tauri::Builder::default()
         .manage(state)
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::servers::cmd_create_server,
             commands::servers::cmd_update_server,
+            commands::servers::cmd_clone_server,
             commands::servers::cmd_delete_server,
             commands::servers::cmd_get_server,
             commands::servers::cmd_list_servers,
@@ -37,9 +39,11 @@ pub fn run() {
             commands::ssh::cmd_launch_rdp,
             commands::ssh::cmd_ping,
             commands::credentials::cmd_create_credential,
+            commands::credentials::cmd_update_credential,
             commands::credentials::cmd_delete_credential,
             commands::credentials::cmd_list_credentials,
             commands::credentials::cmd_get_credential_password,
+            commands::credentials::cmd_test_credential,
             commands::import_export::cmd_import_csv,
             commands::import_export::cmd_export_csv,
             commands::import_export::cmd_export_json,
@@ -55,6 +59,10 @@ pub fn run() {
             commands::sshkeys::cmd_list_ssh_keys,
             commands::sshkeys::cmd_delete_ssh_key,
             commands::sshkeys::cmd_attach_key,
+            commands::tags::cmd_list_tags,
+            commands::tags::cmd_set_server_tags,
+            commands::tags::cmd_list_tags_for_server,
+            commands::tags::cmd_list_recent_servers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

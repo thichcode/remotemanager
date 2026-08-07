@@ -10,11 +10,13 @@ export interface Server {
   group_id: string | null;
   tags: string;
   notes: string;
+  description: string;
   favorite: boolean;
   credential_id: string | null;
   ssh_key_id: string | null;
   created_at: string;
   updated_at: string;
+  last_connected_at: string | null;
 }
 
 export interface Group {

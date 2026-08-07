@@ -28,6 +28,9 @@ pub fn cmd_launch_ssh(
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let name = server_name.unwrap_or_else(|| host.clone());
         let _ = crate::history::record(&conn, server_id.as_deref(), &name, &host, Some(port), "ssh", &username, ssh_key_id.as_deref());
+        if let Some(sid) = server_id.as_deref() {
+            let _ = crate::db::operations::touch_last_connected(&conn, sid);
+        }
     }
 
     // Build wt.exe command. Options (-i, -p) MUST come before the host.
@@ -74,6 +77,9 @@ pub fn cmd_launch_rdp(
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let name = server_name.unwrap_or_else(|| host.clone());
         let _ = crate::history::record(&conn, server_id.as_deref(), &name, &host, Some(3389), "rdp", &username, None);
+        if let Some(sid) = server_id.as_deref() {
+            let _ = crate::db::operations::touch_last_connected(&conn, sid);
+        }
     }
 
     let mut rdp_content = format!(

@@ -17,6 +17,8 @@ pub struct ServerRow {
     pub ssh_key_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub description: String,
+    pub last_connected_at: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -45,6 +47,9 @@ pub struct SettingsRow {
     pub rdp_admin_mode: bool,
 }
 
+const SERVER_COLUMNS: &str = "id, name, host, port, protocol, username, group_id, tags, notes, favorite,
+     credential_id, ssh_key_id, created_at, updated_at, description, last_connected_at";
+
 fn map_server_row(row: &rusqlite::Row) -> rusqlite::Result<ServerRow> {
     Ok(ServerRow {
         id: row.get(0)?,
@@ -61,6 +66,8 @@ fn map_server_row(row: &rusqlite::Row) -> rusqlite::Result<ServerRow> {
         ssh_key_id: row.get(11)?,
         created_at: row.get(12)?,
         updated_at: row.get(13)?,
+        description: row.get(14)?,
+        last_connected_at: row.get(15)?,
     })
 }
 
@@ -75,14 +82,15 @@ pub fn create_server(
     group_id: Option<&str>,
     tags: &str,
     notes: &str,
+    description: &str,
     credential_id: Option<&str>,
     ssh_key_id: Option<&str>,
 ) -> rusqlite::Result<String> {
     let id = Uuid::new_v4().to_string();
     conn.execute(
-        "INSERT INTO servers (id, name, host, port, protocol, username, group_id, tags, notes, credential_id, ssh_key_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-        params![id, name, host, port, protocol, username, group_id, tags, notes, credential_id, ssh_key_id],
+        "INSERT INTO servers (id, name, host, port, protocol, username, group_id, tags, notes, description, credential_id, ssh_key_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![id, name, host, port, protocol, username, group_id, tags, notes, description, credential_id, ssh_key_id],
     )?;
     Ok(id)
 }
@@ -98,15 +106,41 @@ pub fn update_server(
     group_id: Option<&str>,
     tags: &str,
     notes: &str,
+    description: &str,
     credential_id: Option<&str>,
     ssh_key_id: Option<&str>,
 ) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE servers SET name=?2, host=?3, port=?4, protocol=?5, username=?6, group_id=?7,
-         tags=?8, notes=?9, credential_id=?10, ssh_key_id=?11, updated_at=datetime('now') WHERE id=?1",
-        params![id, name, host, port, protocol, username, group_id, tags, notes, credential_id, ssh_key_id],
+         tags=?8, notes=?9, description=?10, credential_id=?11, ssh_key_id=?12, updated_at=datetime('now') WHERE id=?1",
+        params![id, name, host, port, protocol, username, group_id, tags, notes, description, credential_id, ssh_key_id],
     )?;
     Ok(())
+}
+
+pub fn touch_last_connected(conn: &Connection, server_id: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE servers SET last_connected_at = datetime('now') WHERE id=?1",
+        [server_id],
+    )?;
+    Ok(())
+}
+
+pub fn clone_server(conn: &Connection, id: &str) -> rusqlite::Result<Option<String>> {
+    let src = get_server(conn, id)?;
+    if let Some(s) = src {
+        let new_id = Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO servers (id, name, host, port, protocol, username, group_id, tags, notes, description, credential_id, ssh_key_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![new_id,
+                format!("{} (copy)", s.name), s.host, s.port, s.protocol, s.username,
+                s.group_id, s.tags, s.notes, s.description, s.credential_id, s.ssh_key_id],
+        )?;
+        Ok(Some(new_id))
+    } else {
+        Ok(None)
+    }
 }
 
 pub fn delete_server(conn: &Connection, id: &str) -> rusqlite::Result<()> {
@@ -116,8 +150,7 @@ pub fn delete_server(conn: &Connection, id: &str) -> rusqlite::Result<()> {
 
 pub fn get_server(conn: &Connection, id: &str) -> rusqlite::Result<Option<ServerRow>> {
     conn.query_row(
-        "SELECT id, name, host, port, protocol, username, group_id, tags, notes, favorite,
-                credential_id, ssh_key_id, created_at, updated_at FROM servers WHERE id=?1",
+        &format!("SELECT {} FROM servers WHERE id=?1", SERVER_COLUMNS),
         [id],
         map_server_row,
     ).optional()
@@ -125,14 +158,12 @@ pub fn get_server(conn: &Connection, id: &str) -> rusqlite::Result<Option<Server
 
 pub fn list_servers(conn: &Connection, group_id: Option<&str>) -> rusqlite::Result<Vec<ServerRow>> {
     let query = match group_id {
-        Some(_) => "SELECT id, name, host, port, protocol, username, group_id, tags, notes, favorite,
-                     credential_id, ssh_key_id, created_at, updated_at FROM servers WHERE group_id = ?1
-                     ORDER BY favorite DESC, name ASC",
-        None => "SELECT id, name, host, port, protocol, username, group_id, tags, notes, favorite,
-                 credential_id, ssh_key_id, created_at, updated_at FROM servers ORDER BY favorite DESC, name ASC",
+        Some(_) => format!("SELECT {} FROM servers WHERE group_id = ?1
+                     ORDER BY favorite DESC, name ASC", SERVER_COLUMNS),
+        None => format!("SELECT {} FROM servers ORDER BY favorite DESC, name ASC", SERVER_COLUMNS),
     };
 
-    let mut stmt = conn.prepare(query)?;
+    let mut stmt = conn.prepare(&query)?;
     let rows = match group_id {
         Some(gid) => stmt.query_map([gid], map_server_row)?,
         None => stmt.query_map([], map_server_row)?,
@@ -157,11 +188,12 @@ pub fn toggle_favorite(conn: &Connection, id: &str) -> rusqlite::Result<bool> {
 pub fn search_servers(conn: &Connection, query: &str) -> rusqlite::Result<Vec<ServerRow>> {
     let pattern = format!("%{}%", query.to_lowercase());
     let mut stmt = conn.prepare(
-        "SELECT id, name, host, port, protocol, username, group_id, tags, notes, favorite,
-                credential_id, ssh_key_id, created_at, updated_at
-         FROM servers
-         WHERE LOWER(name) LIKE ?1 OR LOWER(host) LIKE ?1 OR LOWER(tags) LIKE ?1
-         ORDER BY favorite DESC, name ASC",
+        &format!(
+            "SELECT {} FROM servers
+             WHERE LOWER(name) LIKE ?1 OR LOWER(host) LIKE ?1 OR LOWER(tags) LIKE ?1
+             ORDER BY favorite DESC, name ASC",
+            SERVER_COLUMNS
+        ),
     )?;
     let rows = stmt.query_map([&pattern], map_server_row)?;
     let mut result = Vec::new();
@@ -250,6 +282,51 @@ pub fn get_credential_password(conn: &Connection, id: &str) -> rusqlite::Result<
         "SELECT encrypted_password FROM credentials WHERE id=?1",
         [id],
         |row| row.get(0),
+    ).optional()
+}
+
+pub fn update_credential(
+    conn: &Connection,
+    id: &str,
+    name: &str,
+    username: &str,
+    encrypted_password: Option<&str>,
+) -> rusqlite::Result<()> {
+    match encrypted_password {
+        Some(pw) => {
+            conn.execute(
+                "UPDATE credentials SET name=?2, username=?3, encrypted_password=?4 WHERE id=?1",
+                params![id, name, username, pw],
+            )?;
+        }
+        None => {
+            conn.execute(
+                "UPDATE credentials SET name=?2, username=?3 WHERE id=?1",
+                params![id, name, username],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct CredentialMeta {
+    pub id: String,
+    pub name: String,
+    pub username: String,
+}
+
+pub fn get_credential_meta(conn: &Connection, id: &str) -> rusqlite::Result<Option<CredentialMeta>> {
+    conn.query_row(
+        "SELECT id, name, username FROM credentials WHERE id=?1",
+        [id],
+        |row| {
+            Ok(CredentialMeta {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                username: row.get(2)?,
+            })
+        },
     ).optional()
 }
 
@@ -416,4 +493,85 @@ pub fn attach_key_to_server(conn: &Connection, server_id: &str, ssh_key_id: Opti
         params![server_id, ssh_key_id],
     )?;
     Ok(())
+}
+
+// Tag operations
+#[derive(Debug, serde::Serialize)]
+pub struct TagRow {
+    pub id: String,
+    pub name: String,
+}
+
+pub fn list_tags(conn: &Connection) -> rusqlite::Result<Vec<TagRow>> {
+    let mut stmt = conn.prepare("SELECT id, name FROM tags ORDER BY name")?;
+    let rows = stmt.query_map([], |row| {
+        Ok(TagRow { id: row.get(0)?, name: row.get(1)? })
+    })?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+pub fn ensure_tag(conn: &Connection, name: &str) -> rusqlite::Result<String> {
+    let id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT OR IGNORE INTO tags (id, name) VALUES (?1, ?2)",
+        params![id, name.trim()],
+    )?;
+    let existing: String = conn.query_row(
+        "SELECT id FROM tags WHERE name=?1",
+        [name.trim()],
+        |row| row.get(0),
+    )?;
+    Ok(existing)
+}
+
+pub fn list_tags_for_server(conn: &Connection, host_id: &str) -> rusqlite::Result<Vec<TagRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT t.id, t.name FROM tags t
+         JOIN host_tags ht ON ht.tag_id = t.id
+         WHERE ht.host_id = ?1 ORDER BY t.name",
+    )?;
+    let rows = stmt.query_map([host_id], |row| {
+        Ok(TagRow { id: row.get(0)?, name: row.get(1)? })
+    })?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+pub fn set_server_tags(conn: &Connection, host_id: &str, names: &[String]) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM host_tags WHERE host_id=?1", [host_id])?;
+    for name in names {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let tag_id = ensure_tag(conn, trimmed)?;
+        conn.execute(
+            "INSERT OR IGNORE INTO host_tags (host_id, tag_id) VALUES (?1, ?2)",
+            params![host_id, tag_id],
+        )?;
+    }
+    Ok(())
+}
+
+pub fn list_recent_servers(conn: &Connection, limit: usize) -> rusqlite::Result<Vec<ServerRow>> {
+    let mut stmt = conn.prepare(
+        &format!(
+            "SELECT {} FROM servers WHERE last_connected_at IS NOT NULL
+             ORDER BY last_connected_at DESC LIMIT ?1",
+            SERVER_COLUMNS
+        ),
+    )?;
+    let rows = stmt.query_map([limit as i64], map_server_row)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
 }

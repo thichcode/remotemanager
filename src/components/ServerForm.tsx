@@ -14,6 +14,7 @@ export function ServerForm({ server }: { server?: Server }) {
   const [groupId, setGroupId] = useState<string | null>(server?.group_id ?? null);
   const [tags, setTags] = useState(server?.tags ?? '');
   const [notes, setNotes] = useState(server?.notes ?? '');
+  const [description, setDescription] = useState(server?.description ?? '');
   const [credentialId, setCredentialId] = useState<string | null>(server?.credential_id ?? null);
   const [sshKeyId, setSshKeyId] = useState<string | null>(server?.ssh_key_id ?? null);
 
@@ -34,9 +35,11 @@ export function ServerForm({ server }: { server?: Server }) {
       group_id: groupId,
       tags: tags.trim(),
       notes: notes.trim(),
+      description: description.trim(),
       favorite: server?.favorite ?? false,
       credential_id: credentialId,
       ssh_key_id: sshKeyId,
+      last_connected_at: null,
     };
 
     if (server) {
@@ -128,6 +131,12 @@ export function ServerForm({ server }: { server?: Server }) {
         onChange={(e) => setNotes(e.currentTarget.value)}
         autosize
         minRows={2}
+      />
+      <TextInput
+        label="Description"
+        placeholder="Short description shown in the list"
+        value={description}
+        onChange={(e) => setDescription(e.currentTarget.value)}
       />
       <Group justify="flex-end">
         <Button variant="subtle" onClick={() => modals.closeAll()}>Cancel</Button>

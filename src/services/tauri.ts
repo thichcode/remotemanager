@@ -8,6 +8,9 @@ export const createServer = (server: Server): Promise<string> =>
 export const updateServer = (id: string, server: Partial<Server>): Promise<void> =>
   invoke('cmd_update_server', { id, ...server });
 
+export const cloneServer = (id: string): Promise<string> =>
+  invoke('cmd_clone_server', { id });
+
 export const deleteServer = (id: string): Promise<void> =>
   invoke('cmd_delete_server', { id });
 
@@ -74,6 +77,21 @@ export const listCredentials = (): Promise<Credential[]> =>
 export const getCredentialPassword = (id: string): Promise<string> =>
   invoke('cmd_get_credential_password', { id });
 
+export const updateCredential = (
+  id: string,
+  name: string,
+  username: string,
+  password?: string
+): Promise<void> =>
+  invoke('cmd_update_credential', { id, name, username, password });
+
+export const testCredential = (
+  id: string,
+  host: string,
+  port?: number
+): Promise<string> =>
+  invoke('cmd_test_credential', { id, host, port });
+
 // Import/Export
 export const importCsv = (path: string): Promise<{ imported: number; errors: string[] }> =>
   invoke('cmd_import_csv', { path });
@@ -112,6 +130,19 @@ export const deleteSshKey = (id: string): Promise<void> =>
   invoke('cmd_delete_ssh_key', { id });
 export const attachKey = (serverId: string, sshKeyId?: string | null): Promise<void> =>
   invoke('cmd_attach_key', { serverId, sshKeyId });
+
+// Tags & Recent
+export const listTags = (): Promise<string[]> =>
+  invoke('cmd_list_tags');
+
+export const setServerTags = (serverId: string, tags: string[]): Promise<void> =>
+  invoke('cmd_set_server_tags', { serverId, tags });
+
+export const listTagsForServer = (serverId: string): Promise<string[]> =>
+  invoke('cmd_list_tags_for_server', { serverId });
+
+export const listRecentServers = (limit?: number): Promise<Server[]> =>
+  invoke('cmd_list_recent_servers', { limit });
 
 // Backup/Restore
 export const backup = (path: string): Promise<BackupSummary> =>
