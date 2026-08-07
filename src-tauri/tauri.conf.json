@@ -25,7 +25,7 @@
   "bundle": {
     "active": true,
     "targets": "msi",
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -36,6 +36,7 @@
   },
   "plugins": {
     "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhCMzk0NTkwOUJEMDk0NDEKUldSQmxOQ2JrRVU1aTA5OW9ldWRjRC9jOEdpeHRQRnVsMmswUlZZaGYwbWl2bUlmbStFaUpDR08K",
       "endpoints": [
         "https://github.com/thichcode/remotemanager/releases/latest/download/latest.json"
       ],
