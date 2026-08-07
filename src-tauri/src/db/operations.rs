@@ -93,6 +93,10 @@ pub fn create_server(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![id, name, host, port, protocol, username, group_id, tags, notes, description, credential_id, ssh_key_id],
     )?;
+    let tag_names = parse_tags(tags);
+    if !tag_names.is_empty() {
+        set_server_tags(conn, &id, &tag_names)?;
+    }
     Ok(id)
 }
 
@@ -117,7 +121,16 @@ pub fn update_server(
          tags=?8, notes=?9, description=?10, credential_id=?11, ssh_key_id=?12, updated_at=datetime('now') WHERE id=?1",
         params![id, name, host, port, protocol, username, group_id, tags, notes, description, credential_id, ssh_key_id],
     )?;
+    let tag_names = parse_tags(tags);
+    set_server_tags(conn, id, &tag_names)?;
     Ok(())
+}
+
+fn parse_tags(tags: &str) -> Vec<String> {
+    tags.split(',')
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect()
 }
 
 /// A server authenticates with exactly one method. An SSH key wins over a
@@ -153,6 +166,12 @@ pub fn clone_server(conn: &Connection, id: &str) -> rusqlite::Result<Option<Stri
                 format!("{} (copy)", s.name), s.host, s.port, s.protocol, s.username,
                 s.group_id, s.tags, s.notes, s.description, credential_id, ssh_key_id],
         )?;
+        // Copy normalized tags from the source server.
+        let tags = list_tags_for_server(conn, id)?;
+        let names: Vec<String> = tags.into_iter().map(|t| t.name).collect();
+        if !names.is_empty() {
+            set_server_tags(conn, &new_id, &names)?;
+        }
         Ok(Some(new_id))
     } else {
         Ok(None)
@@ -272,6 +291,7 @@ pub fn create_credential(
 }
 
 pub fn delete_credential(conn: &Connection, id: &str) -> rusqlite::Result<()> {
+    conn.execute("UPDATE servers SET credential_id=NULL WHERE credential_id=?1", [id])?;
     conn.execute("DELETE FROM credentials WHERE id=?1", [id])?;
     Ok(())
 }
@@ -491,6 +511,7 @@ pub fn list_ssh_keys(conn: &Connection) -> rusqlite::Result<Vec<SshKeyRow>> {
 }
 
 pub fn delete_ssh_key(conn: &Connection, id: &str) -> rusqlite::Result<()> {
+    conn.execute("UPDATE servers SET ssh_key_id=NULL WHERE ssh_key_id=?1", [id])?;
     conn.execute("DELETE FROM ssh_keys WHERE id=?1", [id])?;
     Ok(())
 }
@@ -562,6 +583,7 @@ pub fn list_tags_for_server(conn: &Connection, host_id: &str) -> rusqlite::Resul
 
 pub fn set_server_tags(conn: &Connection, host_id: &str, names: &[String]) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM host_tags WHERE host_id=?1", [host_id])?;
+    let mut kept = Vec::new();
     for name in names {
         let trimmed = name.trim();
         if trimmed.is_empty() {
@@ -572,7 +594,14 @@ pub fn set_server_tags(conn: &Connection, host_id: &str, names: &[String]) -> ru
             "INSERT OR IGNORE INTO host_tags (host_id, tag_id) VALUES (?1, ?2)",
             params![host_id, tag_id],
         )?;
+        kept.push(trimmed.to_string());
     }
+    // Keep the legacy comma-separated column in sync so search and the list
+    // view never diverge from the normalized tag tables.
+    conn.execute(
+        "UPDATE servers SET tags=?2, updated_at=datetime('now') WHERE id=?1",
+        params![host_id, kept.join(", ")],
+    )?;
     Ok(())
 }
 
