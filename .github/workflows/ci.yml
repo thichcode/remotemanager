@@ -8,6 +8,7 @@ on:
 
 env:
   NODE_VERSION: "20"
+  RUST_TARGET: x86_64-pc-windows-msvc
 
 jobs:
   check:
@@ -30,13 +31,14 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ env.RUST_TARGET }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          key: rust-cache-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
 
       - name: Rust check
         working-directory: src-tauri
-        run: cargo check
+        run: cargo check --target ${{ env.RUST_TARGET }}
