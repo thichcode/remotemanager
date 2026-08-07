@@ -107,3 +107,24 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: "--target ${{ env.RUST_TARGET }}"
+
+      - name: Create portable ZIP
+        if: steps.version.outputs.changed == 'true'
+        shell: bash
+        run: |
+          EXE="src-tauri/target/release/remote-manager-mvp.exe"
+          ZIP="src-tauri/target/release/bundle/portable.zip"
+          mkdir -p portable
+          cp "$EXE" "portable/Remote Manager.exe"
+          if [ -d "src-tauri/target/release/resources" ]; then
+            cp -r "src-tauri/target/release/resources/." "portable/"
+          fi
+          cd portable && zip -r "../$ZIP" . && cd ..
+          rm -rf portable
+
+      - name: Upload portable ZIP to Release
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ steps.version.outputs.tag }}" "src-tauri/target/release/bundle/portable.zip" --clobber
