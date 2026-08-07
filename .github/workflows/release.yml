@@ -114,16 +114,17 @@ jobs:
         if: steps.version.outputs.changed == 'true'
         shell: bash
         run: |
-          EXE="src-tauri/target/release/remote-manager-mvp.exe"
+          EXE="src-tauri/target/${{ env.RUST_TARGET }}/release/remote-manager-mvp.exe"
           ZIP="src-tauri/target/release/bundle/portable.zip"
           mkdir -p portable
           cp "$EXE" "portable/Remote Manager.exe"
-          if [ -d "src-tauri/target/release/resources" ]; then
-            cp -r "src-tauri/target/release/resources/." "portable/"
+          if [ -d "src-tauri/target/${{ env.RUST_TARGET }}/release/resources" ]; then
+            cp -r "src-tauri/target/${{ env.RUST_TARGET }}/release/resources/." "portable/"
           fi
           cd portable
           powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../portable-tmp.zip -Force"
           cd ..
+          mkdir -p "$(dirname "$ZIP")"
           mv portable-tmp.zip "$ZIP"
           rm -rf portable
 
