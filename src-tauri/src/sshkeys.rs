@@ -5,6 +5,30 @@ use crate::db::operations;
 use crate::paths;
 use crate::security;
 
+/// OpenSSH on Windows refuses private keys whose ACLs are too permissive
+/// ("Permissions for ... are too open"), which silently falls back to password
+/// auth and ends in "Permission denied". Restrict the key to the current user.
+fn restrict_key_permissions(path: &std::path::Path) {
+    #[cfg(windows)]
+    {
+        let path_str = path.to_string_lossy().to_string();
+        let user = std::env::var("USERNAME").unwrap_or_default();
+        // Remove inherited permissions
+        let _ = std::process::Command::new("icacls")
+            .arg(&path_str)
+            .arg("/inheritance:r")
+            .output();
+        // Grant full control only to the current user
+        if !user.is_empty() {
+            let _ = std::process::Command::new("icacls")
+                .arg(&path_str)
+                .arg("/grant:r")
+                .arg(format!("{}:R", user))
+                .output();
+        }
+    }
+}
+
 pub fn import_private_key(
     conn: &Connection,
     source_path: &str,
@@ -20,6 +44,7 @@ pub fn import_private_key(
     let filename = format!("{}.key", uuid::Uuid::new_v4());
     let dest: PathBuf = key_dir.join(&filename);
     fs::write(&dest, &bytes).map_err(|e| format!("Failed to store key: {}", e))?;
+    restrict_key_permissions(&dest);
 
     let public_key = extract_public_from_private(&bytes);
 

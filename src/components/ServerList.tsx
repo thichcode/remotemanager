@@ -1,5 +1,5 @@
 import { Group, Text, Stack, ActionIcon, Paper, Badge, Tooltip } from '@mantine/core';
-import { IconStar, IconStarFilled, IconPlus, IconPlayerPlay, IconActivity } from '@tabler/icons-react';
+import { IconStar, IconStarFilled, IconPlus, IconPlayerPlay, IconActivity, IconPencil, IconKey } from '@tabler/icons-react';
 import { useStore } from '../store/useStore';
 import { ServerForm } from './ServerForm';
 import { modals } from '@mantine/modals';
@@ -7,7 +7,7 @@ import { launchSsh, launchRdp, pingHost } from '../services/tauri';
 import { notifications } from '@mantine/notifications';
 
 export function ServerList() {
-  const { servers, toggleFavorite, selectedGroupId } = useStore();
+  const { servers, credentials, sshKeys, toggleFavorite, selectedGroupId } = useStore();
 
   const filteredServers = selectedGroupId
     ? servers.filter(s => s.group_id === selectedGroupId)
@@ -46,6 +46,28 @@ export function ServerList() {
     });
   };
 
+  const openEditModal = (server: typeof servers[0]) => {
+    modals.open({
+      title: 'Edit Server',
+      children: <ServerForm server={server} />,
+      size: 'md',
+    });
+  };
+
+  const authBadge = (server: typeof servers[0]) => {
+    if (server.protocol !== 'ssh') return null;
+    if (server.ssh_key_id) {
+      const key = sshKeys.find(k => k.id === server.ssh_key_id);
+      return <Badge size="sm" variant="light" color="violet" leftSection={<IconKey size={10} />}>Key{key ? `: ${key.name}` : ''}</Badge>;
+    }
+    if (server.credential_id) {
+      const cred = credentials.find(c => c.id === server.credential_id);
+      return <Badge size="sm" variant="light" color="grape">Password{cred ? `: ${cred.name}` : ''}</Badge>;
+    }
+    if (server.username) return <Badge size="sm" variant="light" color="gray">Password</Badge>;
+    return null;
+  };
+
   return (
     <Stack gap="md">
       <Group justify="space-between">
@@ -80,8 +102,14 @@ export function ServerList() {
                 <Badge size="sm" variant="light" color={server.protocol === 'ssh' ? 'blue' : 'green'}>
                   {server.protocol.toUpperCase()}
                 </Badge>
+                {authBadge(server)}
               </Group>
               <Group gap="xs">
+                <Tooltip label="Edit">
+                  <ActionIcon size="sm" variant="light" onClick={() => openEditModal(server)}>
+                    <IconPencil size={14} />
+                  </ActionIcon>
+                </Tooltip>
                 <Tooltip label="Connect">
                   <ActionIcon size="sm" variant="light" onClick={() => handleConnect(server)}>
                     <IconPlayerPlay size={14} />

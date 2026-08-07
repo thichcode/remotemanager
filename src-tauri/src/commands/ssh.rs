@@ -30,11 +30,14 @@ pub fn cmd_launch_ssh(
         let _ = crate::history::record(&conn, server_id.as_deref(), &name, &host, Some(port), "ssh", &username, ssh_key_id.as_deref());
     }
 
-    // Build wt.exe command
+    // Build wt.exe command. Options (-i, -p) MUST come before the host.
     let mut cmd = std::process::Command::new("wt.exe");
     cmd.arg("ssh");
     cmd.args(&extra_args);
-    cmd.args([&format!("{}@{}", username, host), "-p", &port.to_string()]);
+    cmd.arg("-o");
+    cmd.arg("IdentitiesOnly=yes");
+    cmd.args(["-p", &port.to_string()]);
+    cmd.arg(format!("{}@{}", username, host));
 
     let status = cmd.spawn();
 
@@ -44,7 +47,8 @@ pub fn cmd_launch_ssh(
             let mut fallback = std::process::Command::new("cmd");
             fallback.args(["/C", "start", "ssh"]);
             fallback.args(&extra_args);
-            fallback.args([&format!("{}@{}", username, host), "-p", &port.to_string()]);
+            fallback.args(["-o", "IdentitiesOnly=yes", "-p", &port.to_string()]);
+            fallback.arg(format!("{}@{}", username, host));
             fallback.spawn().map_err(|e| format!("Failed to launch SSH: {}", e))?;
             Ok(())
         }

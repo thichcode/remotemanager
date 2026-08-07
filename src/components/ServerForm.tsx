@@ -2,19 +2,20 @@ import { useState, useEffect } from 'react';
 import { TextInput, NumberInput, Select, Textarea, Button, Stack, Group } from '@mantine/core';
 import { useStore } from '../store/useStore';
 import { modals } from '@mantine/modals';
+import type { Server } from '../types';
 
-export function ServerForm() {
-  const { createServer, groups, credentials, sshKeys, loadCredentials, loadSshKeys } = useStore();
-  const [name, setName] = useState('');
-  const [host, setHost] = useState('');
-  const [port, setPort] = useState(22);
-  const [protocol, setProtocol] = useState<string | null>('ssh');
-  const [username, setUsername] = useState('');
-  const [groupId, setGroupId] = useState<string | null>(null);
-  const [tags, setTags] = useState('');
-  const [notes, setNotes] = useState('');
-  const [credentialId, setCredentialId] = useState<string | null>(null);
-  const [sshKeyId, setSshKeyId] = useState<string | null>(null);
+export function ServerForm({ server }: { server?: Server }) {
+  const { createServer, updateServer, groups, credentials, sshKeys, loadCredentials, loadSshKeys } = useStore();
+  const [name, setName] = useState(server?.name ?? '');
+  const [host, setHost] = useState(server?.host ?? '');
+  const [port, setPort] = useState(server?.port ?? 22);
+  const [protocol, setProtocol] = useState<string | null>(server?.protocol ?? 'ssh');
+  const [username, setUsername] = useState(server?.username ?? '');
+  const [groupId, setGroupId] = useState<string | null>(server?.group_id ?? null);
+  const [tags, setTags] = useState(server?.tags ?? '');
+  const [notes, setNotes] = useState(server?.notes ?? '');
+  const [credentialId, setCredentialId] = useState<string | null>(server?.credential_id ?? null);
+  const [sshKeyId, setSshKeyId] = useState<string | null>(server?.ssh_key_id ?? null);
 
   useEffect(() => {
     loadCredentials();
@@ -24,7 +25,7 @@ export function ServerForm() {
   const handleSubmit = async () => {
     if (!name.trim() || !host.trim() || !protocol) return;
 
-    await createServer({
+    const payload = {
       name: name.trim(),
       host: host.trim(),
       port,
@@ -33,10 +34,16 @@ export function ServerForm() {
       group_id: groupId,
       tags: tags.trim(),
       notes: notes.trim(),
-      favorite: false,
+      favorite: server?.favorite ?? false,
       credential_id: credentialId,
       ssh_key_id: sshKeyId,
-    });
+    };
+
+    if (server) {
+      await updateServer(server.id, payload);
+    } else {
+      await createServer(payload);
+    }
 
     modals.closeAll();
   };
@@ -125,7 +132,7 @@ export function ServerForm() {
       <Group justify="flex-end">
         <Button variant="subtle" onClick={() => modals.closeAll()}>Cancel</Button>
         <Button onClick={handleSubmit} disabled={!name.trim() || !host.trim() || !protocol}>
-          Save Server
+          {server ? 'Save Changes' : 'Save Server'}
         </Button>
       </Group>
     </Stack>
