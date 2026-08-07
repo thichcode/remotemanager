@@ -121,7 +121,10 @@ jobs:
           if [ -d "src-tauri/target/release/resources" ]; then
             cp -r "src-tauri/target/release/resources/." "portable/"
           fi
-          cd portable && zip -r "../$ZIP" . && cd ..
+          cd portable
+          powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../portable-tmp.zip -Force"
+          cd ..
+          mv portable-tmp.zip "$ZIP"
           rm -rf portable
 
       - name: Upload portable ZIP to Release
