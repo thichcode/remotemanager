@@ -99,7 +99,8 @@ jobs:
             ## Remote Manager ${{ steps.version.outputs.tag }}
 
             ### Installation
-            Download `Remote Manager_*_x64_en-US.msi` and run the installer.
+            - **MSI Installer**: Download `Remote Manager_*_x64_en-US.msi` and run the installer.
+            - **Portable ZIP**: Download `Remote Manager_*_x64_en-US.zip`, extract and run `Remote Manager.exe`.
 
             ### Auto-Update
             The app checks for updates automatically. Install and restart.
