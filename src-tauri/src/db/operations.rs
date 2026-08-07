@@ -86,6 +86,7 @@ pub fn create_server(
     credential_id: Option<&str>,
     ssh_key_id: Option<&str>,
 ) -> rusqlite::Result<String> {
+    let (credential_id, ssh_key_id) = normalize_auth(credential_id, ssh_key_id);
     let id = Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO servers (id, name, host, port, protocol, username, group_id, tags, notes, description, credential_id, ssh_key_id)
@@ -110,12 +111,26 @@ pub fn update_server(
     credential_id: Option<&str>,
     ssh_key_id: Option<&str>,
 ) -> rusqlite::Result<()> {
+    let (credential_id, ssh_key_id) = normalize_auth(credential_id, ssh_key_id);
     conn.execute(
         "UPDATE servers SET name=?2, host=?3, port=?4, protocol=?5, username=?6, group_id=?7,
          tags=?8, notes=?9, description=?10, credential_id=?11, ssh_key_id=?12, updated_at=datetime('now') WHERE id=?1",
         params![id, name, host, port, protocol, username, group_id, tags, notes, description, credential_id, ssh_key_id],
     )?;
     Ok(())
+}
+
+/// A server authenticates with exactly one method. An SSH key wins over a
+/// saved credential; when a key is set the credential is cleared so a stale
+/// password can never shadow the key (and vice versa).
+fn normalize_auth<'a>(
+    credential_id: Option<&'a str>,
+    ssh_key_id: Option<&'a str>,
+) -> (Option<&'a str>, Option<&'a str>) {
+    match (credential_id, ssh_key_id) {
+        (_, Some(key)) if !key.trim().is_empty() => (None, Some(key)),
+        _ => (credential_id, ssh_key_id),
+    }
 }
 
 pub fn touch_last_connected(conn: &Connection, server_id: &str) -> rusqlite::Result<()> {
@@ -129,13 +144,14 @@ pub fn touch_last_connected(conn: &Connection, server_id: &str) -> rusqlite::Res
 pub fn clone_server(conn: &Connection, id: &str) -> rusqlite::Result<Option<String>> {
     let src = get_server(conn, id)?;
     if let Some(s) = src {
+        let (credential_id, ssh_key_id) = normalize_auth(s.credential_id.as_deref(), s.ssh_key_id.as_deref());
         let new_id = Uuid::new_v4().to_string();
         conn.execute(
             "INSERT INTO servers (id, name, host, port, protocol, username, group_id, tags, notes, description, credential_id, ssh_key_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![new_id,
                 format!("{} (copy)", s.name), s.host, s.port, s.protocol, s.username,
-                s.group_id, s.tags, s.notes, s.description, s.credential_id, s.ssh_key_id],
+                s.group_id, s.tags, s.notes, s.description, credential_id, ssh_key_id],
         )?;
         Ok(Some(new_id))
     } else {

@@ -100,20 +100,28 @@ export function ServerForm({ server }: { server?: Server }) {
         searchable
       />
       <Select
-        label="Credential Profile"
+        label="Credential Profile (password)"
+        description={sshKeyId ? 'Clear the SSH Key to use a saved password.' : 'Saved password used when no SSH Key is set.'}
         data={credentials.map(c => ({ value: c.id, label: c.name }))}
         value={credentialId}
-        onChange={setCredentialId}
+        onChange={(v) => {
+          setCredentialId(v);
+          if (v) setSshKeyId(null);
+        }}
         clearable
         searchable
       />
       {protocol === 'ssh' && (
         <Select
           label="SSH Key"
+          description={credentialId ? 'Selecting a key switches this server to key auth and clears the saved password.' : 'Uses the private key instead of a password.'}
           placeholder="None"
           data={sshKeys.map(k => ({ value: k.id, label: k.name }))}
           value={sshKeyId}
-          onChange={setSshKeyId}
+          onChange={(v) => {
+            setSshKeyId(v);
+            if (v) setCredentialId(null);
+          }}
           clearable
           searchable
         />
