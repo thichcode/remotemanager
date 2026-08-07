@@ -1,6 +1,6 @@
 {
   "productName": "Remote Manager",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "identifier": "com.remote-manager.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -40,7 +40,9 @@
       "endpoints": [
         "https://github.com/thichcode/remotemanager/releases/latest/download/latest.json"
       ],
-      "windows": { "installMode": "passive" }
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
