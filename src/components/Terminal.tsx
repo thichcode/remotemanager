@@ -81,15 +81,21 @@ export function Terminal({ tab, active }: Props) {
     }
   }, [active]);
 
-  // fit on window resize
+  // fit when the container actually has size (window resizes and when the
+  // servers view becomes visible again after a view switch)
   useEffect(() => {
-    const onResize = () => {
-      if (active && fitRef.current && termRef.current) {
-        fitRef.current.fit();
-      }
+    if (!containerRef.current) return;
+    const fit = () => {
+      const el = containerRef.current;
+      if (!active || !fitRef.current || !termRef.current || !el || el.offsetParent === null) return;
+      fitRef.current.fit();
+      const t = termRef.current;
+      const sid = sessionRef.current;
+      if (sid) sshResize(sid, t.cols, t.rows).catch(() => {});
     };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    const observer = new ResizeObserver(fit);
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
   }, [active]);
 
   if (tab.status === 'closed' && !tab.sessionId) {

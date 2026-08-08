@@ -49,7 +49,13 @@ export function Layout() {
 
       <AppShell.Main>
         {/* Servers view: kept mounted always so terminal sessions survive view switches */}
-        <div style={{ display: view === 'servers' ? 'flex' : 'none', gap: 16, height: '100%', minHeight: 0 }}>
+        <div
+          style={{
+            display: view === 'servers' ? 'flex' : 'none',
+            gap: 16,
+            height: 'calc(100dvh - var(--app-shell-header-offset, 0px) - var(--app-shell-footer-offset, 0px) - calc(var(--app-shell-padding, 0px) * 2))',
+          }}
+        >
           <div style={{ flex: showTerminal ? '0 0 40%' : '1 1 auto', minWidth: 0, overflowY: 'auto' }}>
             <ServerList />
           </div>
