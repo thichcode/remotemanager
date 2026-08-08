@@ -16,8 +16,6 @@ export function Terminal({ tab, active }: Props) {
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const sessionRef = useRef<string | null>(tab.sessionId);
-  const tabRef = useRef<TerminalTab>(tab);
-  tabRef.current = tab;
 
   useEffect(() => {
     sessionRef.current = tab.sessionId;
