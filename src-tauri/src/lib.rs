@@ -4,6 +4,7 @@ mod db;
 mod history;
 mod paths;
 mod security;
+mod sessions;
 mod sshkeys;
 
 use db::{AppState, init_connection};
