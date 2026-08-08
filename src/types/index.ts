@@ -72,3 +72,11 @@ export interface BackupSummary {
   db_size: number;
   keys_count: number;
 }
+
+export interface TerminalTab {
+  id: string;
+  title: string;
+  serverId: string | null;
+  sessionId: string | null;
+  status: 'connecting' | 'connected' | 'closed';
+}

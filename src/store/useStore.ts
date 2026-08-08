@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Server, Group, Credential, Settings, HistoryEntry, SshKey } from '../types';
+import type { Server, Group, Credential, Settings, HistoryEntry, SshKey, TerminalTab } from '../types';
 import * as api from '../services/tauri';
 
 interface AppState {
@@ -13,6 +13,8 @@ interface AppState {
   selectedGroupId: string | null;
   selectedServerId: string | null;
   isLoading: boolean;
+  terminalTabs: TerminalTab[];
+  activeTerminalTabId: string | null;
 
   loadServers: () => Promise<void>;
   loadGroups: () => Promise<void>;
@@ -39,6 +41,9 @@ interface AppState {
   setSearchQuery: (query: string) => void;
   setSelectedGroup: (id: string | null) => void;
   setSelectedServer: (id: string | null) => void;
+  openTerminalTab: (server: Server) => Promise<void>;
+  closeTerminalTab: (id: string) => Promise<void>;
+  focusTerminalTab: (id: string) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -52,6 +57,8 @@ export const useStore = create<AppState>((set, get) => ({
   selectedGroupId: null,
   selectedServerId: null,
   isLoading: false,
+  terminalTabs: [],
+  activeTerminalTabId: null,
 
   loadServers: async () => {
     const groupId = get().selectedGroupId;
@@ -196,4 +203,55 @@ export const useStore = create<AppState>((set, get) => ({
     get().loadServers();
   },
   setSelectedServer: (id) => set({ selectedServerId: id }),
+
+  openTerminalTab: async (server) => {
+    const tabId = crypto.randomUUID();
+    set({
+      terminalTabs: [
+        ...get().terminalTabs,
+        { id: tabId, title: `${server.username || 'user'}@${server.host}`, serverId: server.id, sessionId: null, status: 'connecting' },
+      ],
+      activeTerminalTabId: tabId,
+    });
+    try {
+      const sessionId = await api.openSshSession({
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        serverId: server.id,
+        serverName: server.name,
+        sshKeyId: server.ssh_key_id,
+        credentialId: server.credential_id,
+      });
+      set({
+        terminalTabs: get().terminalTabs.map(t =>
+          t.id === tabId ? { ...t, sessionId, status: 'connected' } : t
+        ),
+      });
+    } catch (e) {
+      set({
+        terminalTabs: get().terminalTabs.map(t =>
+          t.id === tabId ? { ...t, status: 'closed' } : t
+        ),
+      });
+      throw e;
+    }
+  },
+
+  closeTerminalTab: async (id) => {
+    const tab = get().terminalTabs.find(t => t.id === id);
+    const remaining = get().terminalTabs.filter(t => t.id !== id);
+    set({
+      terminalTabs: remaining,
+      activeTerminalTabId:
+        get().activeTerminalTabId === id
+          ? remaining.length > 0 ? remaining[0].id : null
+          : get().activeTerminalTabId,
+    });
+    if (tab?.sessionId) {
+      try { await api.sshClose(tab.sessionId); } catch { /* already gone */ }
+    }
+  },
+
+  focusTerminalTab: (id) => set({ activeTerminalTabId: id }),
 }));

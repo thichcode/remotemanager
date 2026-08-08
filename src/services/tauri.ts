@@ -148,3 +148,35 @@ export const backup = (path: string): Promise<BackupSummary> =>
   invoke('cmd_backup', { path });
 export const restore = (path: string): Promise<void> =>
   invoke('cmd_restore', { path });
+
+// SSH Sessions
+export const openSshSession = (args: {
+  host: string;
+  port: number;
+  username: string;
+  serverId?: string | null;
+  serverName?: string | null;
+  sshKeyId?: string | null;
+  credentialId?: string | null;
+}): Promise<string> =>
+  invoke('cmd_open_ssh_session', {
+    host: args.host,
+    port: args.port,
+    username: args.username,
+    server_id: args.serverId ?? null,
+    server_name: args.serverName ?? null,
+    ssh_key_id: args.sshKeyId ?? null,
+    credential_id: args.credentialId ?? null,
+  });
+
+export const sshWrite = (sessionId: string, data: number[]): Promise<void> =>
+  invoke('cmd_ssh_write', { session_id: sessionId, data });
+
+export const sshResize = (sessionId: string, cols: number, rows: number): Promise<void> =>
+  invoke('cmd_ssh_resize', { session_id: sessionId, cols, rows });
+
+export const sshClose = (sessionId: string): Promise<void> =>
+  invoke('cmd_ssh_close', { session_id: sessionId });
+
+export const sshCloseAll = (): Promise<void> =>
+  invoke('cmd_ssh_close_all');
