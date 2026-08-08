@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { listen } from '@tauri-apps/api/event';
-import { sshWrite, sshResize, sshClose } from '../services/tauri';
+import { sshWrite, sshResize } from '../services/tauri';
 import { Stack, Text } from '@mantine/core';
 import type { TerminalTab } from '../types';
 
@@ -54,13 +54,16 @@ export function Terminal({ tab, active }: Props) {
       term.write(`\r\n\x1b[31mConnection closed (code ${event.payload.code})\x1b[0m\r\n`);
     });
     let cancelled = false;
-    Promise.all([unlistenOutput, unlistenExit]).then(([a, b]) => {
-      if (cancelled) { a(); b(); return; }
-    });
+    const unlisteners: (() => void)[] = [];
+    Promise.all([unlistenOutput, unlistenExit])
+      .then(([a, b]) => {
+        if (cancelled) { a(); b(); return; }
+        unlisteners.push(a, b);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
-      const sid = sessionRef.current;
-      if (sid) sshClose(sid).catch(() => {});
+      unlisteners.forEach((u) => u());
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -72,6 +75,7 @@ export function Terminal({ tab, active }: Props) {
     if (active && fitRef.current && termRef.current) {
       const t = termRef.current;
       fitRef.current.fit();
+      t.focus();
       const sid = sessionRef.current;
       if (sid) sshResize(sid, t.cols, t.rows).catch(() => {});
     }
