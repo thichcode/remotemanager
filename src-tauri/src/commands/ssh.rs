@@ -47,6 +47,11 @@ pub fn cmd_launch_ssh(
     if let Some(kid) = ssh_key_id.as_deref() {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         if let Some(key_path) = crate::sshkeys::get_private_key_path(&conn, kid)? {
+            // Re-apply restrictive ACL on every launch so pre-existing keys
+            // imported by older builds (group access left behind by
+            // `/inheritance:r`) no longer trigger "too open" and are not
+            // silently ignored.
+            crate::sshkeys::ensure_key_permissions(&key_path);
             extra_args.push("-i".to_string());
             extra_args.push(key_path);
         }

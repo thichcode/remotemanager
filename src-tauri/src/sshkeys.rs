@@ -7,26 +7,31 @@ use crate::security;
 
 /// OpenSSH on Windows refuses private keys whose ACLs are too permissive
 /// ("Permissions for ... are too open"), which silently falls back to password
-/// auth and ends in "Permission denied". Restrict the key to the current user.
+/// auth and ends in "Permission denied". Replace the entire DACL so the only
+/// permitted principal is the current user.
+///
+/// `icacls /inheritance:r` is NOT enough here: it *copies* the inherited ACEs
+/// into explicit ones, so group access (e.g. "CodexSandboxUsers") survives and
+/// OpenSSH still rejects the key. We instead reset DACL protection and re-add
+/// a single allow rule for the current user only.
 fn restrict_key_permissions(path: &std::path::Path) {
     #[cfg(windows)]
     {
-        let path_str = path.to_string_lossy().to_string();
-        let user = std::env::var("USERNAME").unwrap_or_default();
-        // Remove inherited permissions
-        let _ = std::process::Command::new("icacls")
-            .arg(&path_str)
-            .arg("/inheritance:r")
+        let p = path.to_string_lossy().replace('\'', "''");
+        let script = format!(
+            "$p = '{0}'; $acl = Get-Acl -LiteralPath $p; $acl.SetAccessRuleProtection($true, $false); $id = $env:USERDOMAIN + '\\' + $env:USERNAME; $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(($id -as [string]).Trim(), 'FullControl', 'Allow'); $acl.AddAccessRule($rule); Set-Acl -LiteralPath $p -AclObject $acl",
+            p
+        );
+        let _ = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &script])
             .output();
-        // Grant full control only to the current user
-        if !user.is_empty() {
-            let _ = std::process::Command::new("icacls")
-                .arg(&path_str)
-                .arg("/grant:r")
-                .arg(format!("{}:R", user))
-                .output();
-        }
     }
+}
+
+/// Re-apply the ACL restriction to an existing registered key (fixes keys that
+/// were imported by older builds whose `/inheritance:r` left group access).
+pub fn ensure_key_permissions(path: &str) {
+    restrict_key_permissions(std::path::Path::new(path));
 }
 
 pub fn import_private_key(
