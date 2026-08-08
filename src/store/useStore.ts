@@ -223,6 +223,11 @@ export const useStore = create<AppState>((set, get) => ({
         sshKeyId: server.ssh_key_id,
         credentialId: server.credential_id,
       });
+      if (!get().terminalTabs.some(t => t.id === tabId)) {
+        // Tab was closed while the session was connecting — release it.
+        try { await api.sshClose(sessionId); } catch { /* already gone */ }
+        return;
+      }
       set({
         terminalTabs: get().terminalTabs.map(t =>
           t.id === tabId ? { ...t, sessionId, status: 'connected' } : t
