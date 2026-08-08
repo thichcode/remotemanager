@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Group, Text, Stack, ActionIcon, Paper, Badge, Tooltip, Button, Menu, Modal, SegmentedControl } from '@mantine/core';
 import {
   IconStar, IconStarFilled, IconPlus, IconPlayerPlay, IconActivity, IconPencil,
-  IconKey, IconCopy, IconTrash, IconUpload, IconDownload, IconDots,
+  IconKey, IconCopy, IconTrash, IconUpload, IconDownload, IconDots, IconExternalLink,
 } from '@tabler/icons-react';
 import { useStore } from '../store/useStore';
 import { ServerForm } from './ServerForm';
@@ -13,7 +13,7 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 import type { Protocol } from '../types';
 
 export function ServerList() {
-  const { servers, credentials, sshKeys, toggleFavorite, selectedGroupId, deleteServer, loadServers } = useStore();
+  const { servers, credentials, sshKeys, toggleFavorite, selectedGroupId, deleteServer, loadServers, openTerminalTab } = useStore();
   const [protocolFilter, setProtocolFilter] = useState<Protocol | 'all'>('all');
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
@@ -55,10 +55,18 @@ export function ServerList() {
   const handleConnect = async (server: typeof servers[0]) => {
     try {
       if (server.protocol === 'ssh') {
-        await launchSsh(server.host, server.port, server.username, server.id, server.name, server.ssh_key_id, server.credential_id);
+        await openTerminalTab(server);
       } else {
         await launchRdp(server.host, server.username, false, false, server.id, server.name, server.credential_id);
       }
+    } catch (e: any) {
+      notifications.show({ title: 'Error', message: e.toString(), color: 'red' });
+    }
+  };
+
+  const handleConnectExternal = async (server: typeof servers[0]) => {
+    try {
+      await launchSsh(server.host, server.port, server.username, server.id, server.name, server.ssh_key_id, server.credential_id);
     } catch (e: any) {
       notifications.show({ title: 'Error', message: e.toString(), color: 'red' });
     }
@@ -253,6 +261,9 @@ export function ServerList() {
                     </ActionIcon>
                   </Menu.Target>
                   <Menu.Dropdown>
+                    <Menu.Item leftSection={<IconExternalLink size={14} />} onClick={() => handleConnectExternal(server)}>
+                      Open in external terminal
+                    </Menu.Item>
                     <Menu.Item leftSection={<IconCopy size={14} />} onClick={() => handleClone(server)}>Clone</Menu.Item>
                     <Menu.Item leftSection={<IconTrash size={14} />} color="red" onClick={() => handleDelete(server)}>Delete</Menu.Item>
                   </Menu.Dropdown>
