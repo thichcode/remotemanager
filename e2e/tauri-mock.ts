@@ -23,8 +23,10 @@ export const TAURI_MOCK_BODY = String.raw`(() => {
   const uid = () => (Math.random().toString(36) + Date.now().toString(36)).slice(2, 14);
 
   const listeners = {};
+  let eventIdCounter = 1;
   const emit = (event, payload) => {
-    (listeners[event] || []).forEach((cb) => cb({ event, id: 0, payload }));
+    const byId = listeners[event] || {};
+    Object.keys(byId).forEach((id) => byId[id]({ event, id: Number(id), payload }));
   };
   window.__rm_emit = emit;
   window.__rm_listeners = listeners;
@@ -139,12 +141,19 @@ export const TAURI_MOCK_BODY = String.raw`(() => {
 
   let callbackId = 1;
   const callbacks = new Map();
+  window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+    unregisterListener: (event, eventId) => {
+      if (listeners[event]) delete listeners[event][eventId];
+    },
+  };
   window.__TAURI_INTERNALS__ = {
     invoke: (cmd, args) => {
       if (cmd === 'plugin:event|listen') {
         const { event, handler } = args || {};
-        (listeners[event] = listeners[event] || []).push((e) => window.__TAURI_INTERNALS__.runCallback(handler, e));
-        return Promise.resolve(Date.now());
+        const eventId = eventIdCounter++;
+        listeners[event] = listeners[event] || {};
+        listeners[event][eventId] = (e) => window.__TAURI_INTERNALS__.runCallback(handler, e);
+        return Promise.resolve(eventId);
       }
       if (cmd === 'plugin:event|unlisten') return Promise.resolve(null);
       if (cmd.startsWith('plugin:')) {
