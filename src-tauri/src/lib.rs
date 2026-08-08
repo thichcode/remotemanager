@@ -8,6 +8,7 @@ mod sessions;
 mod sshkeys;
 
 use db::{AppState, init_connection};
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,9 +19,10 @@ pub fn run() {
     let _ = backup::auto_backup(&conn, 7);
     let state = AppState {
         db: std::sync::Mutex::new(conn),
+        sessions: std::sync::Arc::new(crate::sessions::SessionManager::new()),
     };
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(state)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
@@ -65,7 +67,20 @@ pub fn run() {
             commands::tags::cmd_set_server_tags,
             commands::tags::cmd_list_tags_for_server,
             commands::tags::cmd_list_recent_servers,
+            commands::sessions::cmd_open_ssh_session,
+            commands::sessions::cmd_ssh_write,
+            commands::sessions::cmd_ssh_resize,
+            commands::sessions::cmd_ssh_close,
+            commands::sessions::cmd_ssh_close_all,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { .. } = event {
+            if let Some(state) = app_handle.try_state::<AppState>() {
+                let _ = crate::commands::sessions::cmd_ssh_close_all(state);
+            }
+        }
+    });
 }

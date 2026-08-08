@@ -8,3 +8,4 @@ pub mod backup;
 pub mod history;
 pub mod sshkeys;
 pub mod tags;
+pub mod sessions;

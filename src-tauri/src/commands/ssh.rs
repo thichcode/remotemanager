@@ -4,7 +4,7 @@ use crate::security::input::{validate_host, validate_username};
 /// If the caller did not provide a username but a credential is attached,
 /// fill in the username from the credential vault. This avoids making the
 /// operator re-type a username they already saved.
-fn resolve_username(
+pub(crate) fn resolve_username(
     state: &tauri::State<crate::db::AppState>,
     username: String,
     credential_id: Option<&str>,
