@@ -7,7 +7,7 @@ pub fn cmd_get_settings(state: State<AppState>) -> Result<operations::SettingsRo
     operations::get_settings(&conn).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn cmd_update_settings(
     state: State<AppState>,
     theme: String,

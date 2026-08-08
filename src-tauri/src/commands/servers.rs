@@ -8,7 +8,7 @@ fn validate_port(port: i32) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn cmd_create_server(
     state: State<AppState>,
     name: String,
@@ -40,7 +40,7 @@ pub fn cmd_create_server(
     ).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn cmd_update_server(
     state: State<AppState>,
     id: String,
