@@ -16,9 +16,17 @@ export function Terminal({ tab, active }: Props) {
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const sessionRef = useRef<string | null>(tab.sessionId);
+  const pendingRef = useRef<number[][]>([]);
 
   useEffect(() => {
     sessionRef.current = tab.sessionId;
+    if (tab.sessionId && pendingRef.current.length) {
+      const pending = pendingRef.current;
+      pendingRef.current = [];
+      for (const bytes of pending) {
+        sshWrite(tab.sessionId, bytes).catch(() => {});
+      }
+    }
   }, [tab.sessionId]);
 
   // init xterm once
@@ -39,10 +47,13 @@ export function Terminal({ tab, active }: Props) {
     fitRef.current = fit;
 
     term.onData((data) => {
-      const sid = sessionRef.current;
-      if (!sid) return;
       const bytes = Array.from(new TextEncoder().encode(data));
-      sshWrite(sid, bytes).catch(() => {});
+      const sid = sessionRef.current;
+      if (sid) {
+        sshWrite(sid, bytes).catch(() => {});
+      } else {
+        pendingRef.current.push(bytes);
+      }
     });
 
     const unlistenOutput = listen<{ sessionId: string; data: number[] }>('ssh://output', (event) => {
@@ -52,6 +63,7 @@ export function Terminal({ tab, active }: Props) {
     const unlistenExit = listen<{ sessionId: string; code: number }>('ssh://exit', (event) => {
       if (event.payload.sessionId !== sessionRef.current) return;
       term.write(`\r\n\x1b[31mConnection closed (code ${event.payload.code})\x1b[0m\r\n`);
+      (term.options as { readonly?: boolean }).readonly = true;
     });
     let cancelled = false;
     const unlisteners: (() => void)[] = [];

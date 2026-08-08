@@ -15,7 +15,7 @@ export type View = 'servers' | 'keys' | 'credentials' | 'settings';
 export function Layout() {
   const [view, setView] = useState<View>('servers');
   const { terminalTabs, activeTerminalTabId, focusTerminalTab, closeTerminalTab } = useStore();
-  const showTerminal = view === 'servers' && terminalTabs.length > 0;
+  const showTerminal = terminalTabs.length > 0;
 
   return (
     <AppShell

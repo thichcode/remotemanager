@@ -172,3 +172,21 @@ test('ssh terminal sends keystrokes and closes session', async ({ page }) => {
   });
   expect(sessionsAfterClose.length).toBe(0);
 });
+
+test('ssh terminal session survives view switches', async ({ page }) => {
+  await boot(page, {
+    servers: [makeServer({ id: 'srv-ssh', name: 'web-node', host: '10.0.0.66', username: 'ubuntu', ssh_key_id: 'key-001' })],
+    sshKeys: [{ id: 'key-001', name: 'crewkey', public_key: 'ssh-ed25519 AAAA', created_at: new Date().toISOString() }],
+  });
+
+  await page.getByRole('button', { name: 'Connect server' }).click();
+  await expect(page.locator('.xterm')).toContainText('mock ssh session ready');
+
+  // Switch to Settings and back to Servers — the terminal and its session must survive.
+  await page.getByText('Settings', { exact: true }).click();
+  await expect(page.getByText('Backup Data')).toBeVisible();
+  await page.getByText('Servers', { exact: true }).click();
+
+  await expect(page.locator('.xterm')).toContainText('mock ssh session ready');
+  await expect(page.getByText('ubuntu@10.0.0.66', { exact: true })).toBeVisible();
+});
