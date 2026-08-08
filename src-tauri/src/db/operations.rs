@@ -183,6 +183,24 @@ pub fn delete_server(conn: &Connection, id: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
+/// Find a server by its display identity (name+host+port+protocol) so imports
+/// can round-trip without silently duplicating rows and detaching their
+/// credential/ssh-key references.
+pub fn find_server_by_identity(
+    conn: &Connection,
+    name: &str,
+    host: &str,
+    port: i32,
+    protocol: &str,
+) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT id FROM servers WHERE lower(name)=lower(?1) AND lower(host)=lower(?2) AND port=?3 AND protocol=?4 LIMIT 1",
+        params![name, host, port, protocol],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
 pub fn get_server(conn: &Connection, id: &str) -> rusqlite::Result<Option<ServerRow>> {
     conn.query_row(
         &format!("SELECT {} FROM servers WHERE id=?1", SERVER_COLUMNS),
@@ -619,4 +637,78 @@ pub fn list_recent_servers(conn: &Connection, limit: usize) -> rusqlite::Result<
         result.push(row?);
     }
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::schema;
+
+    fn test_conn() -> Connection {
+        let conn = Connection::open_in_memory().expect("open memory db");
+        rusqlite::Connection::execute_batch(&conn, "PRAGMA foreign_keys=ON;").unwrap();
+        schema::create_tables(&conn).expect("create tables");
+        schema::migrate(&conn).expect("migrate");
+        conn
+    }
+
+    #[test]
+    fn ssh_key_survives_search_and_group_list() {
+        let conn = test_conn();
+        let key_id = create_ssh_key(&conn, "prod", "C:\\keys\\prod.key", "", "").unwrap();
+        let server_id = create_server(
+            &conn, "srv", "10.0.0.18", 22, "ssh", "root", None, "", "", "", None, Some(&key_id),
+        )
+        .unwrap();
+
+        // The launch/list/search path reads SERVER_COLUMNS — the key must come back.
+        for row in list_servers(&conn, None).unwrap() {
+            assert_eq!(row.ssh_key_id.as_deref(), Some(&key_id as &str));
+        }
+        let hits = search_servers(&conn, "10.0.0").unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].ssh_key_id.as_deref(), Some(&key_id as &str));
+        let got = get_server(&conn, &server_id).unwrap().unwrap();
+        assert_eq!(got.ssh_key_id.as_deref(), Some(&key_id as &str));
+    }
+
+    #[test]
+    fn update_server_preserves_key_when_form_sends_it() {
+        let conn = test_conn();
+        let key_id = create_ssh_key(&conn, "k", "k", "", "").unwrap();
+        let server_id = create_server(
+            &conn, "srv", "h", 22, "ssh", "root", None, "", "", "", None, None,
+        )
+        .unwrap();
+
+        // Simulate picking the key from the form.
+        update_server(
+            &conn, &server_id, "srv", "h", 22, "ssh", "root", None, "", "", "", None, Some(&key_id),
+        )
+        .unwrap();
+        let row = get_server(&conn, &server_id).unwrap().unwrap();
+        assert_eq!(row.ssh_key_id.as_deref(), Some(&key_id as &str));
+
+        // Simulate the edit form submit when the user keeps the key selected.
+        update_server(
+            &conn, &server_id, "srv", "h", 22, "ssh", "root", None, "tag", "", "", None, Some(&key_id),
+        )
+        .unwrap();
+        let row = get_server(&conn, &server_id).unwrap().unwrap();
+        assert_eq!(row.ssh_key_id.as_deref(), Some(&key_id as &str));
+    }
+
+    #[test]
+    fn identity_roundtrip_does_not_detach_key() {
+        let conn = test_conn();
+        let key_id = create_ssh_key(&conn, "k", "k", "", "").unwrap();
+        let server_id = create_server(
+            &conn, "srv", "10.0.0.18", 22, "ssh", "root", None, "", "", "", None, Some(&key_id),
+        )
+        .unwrap();
+
+        // Re-importing an identical server must not create a detached duplicate.
+        let existing = find_server_by_identity(&conn, "srv", "10.0.0.18", 22, "ssh").unwrap();
+        assert_eq!(existing.as_deref(), Some(&server_id as &str));
+    }
 }

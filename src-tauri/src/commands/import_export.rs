@@ -66,6 +66,21 @@ pub fn cmd_import_csv(state: State<AppState>, path: String) -> Result<(usize, Ve
                     22
                 };
 
+                // Round-trip safety: if a server with the same identity already
+                // exists, skip it instead of duplicating the row and detaching
+                // the credential/ssh-key reference it may already hold.
+                match operations::find_server_by_identity(&conn, &name, &host, port, &protocol) {
+                    Ok(Some(existing_id)) => {
+                        errors.push(format!("Row {}: '{}' already exists, skipped", i + 2, existing_id));
+                        continue;
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        errors.push(format!("Row {}: database error - {}", i + 2, e));
+                        continue;
+                    }
+                }
+
                 match operations::create_server(&conn, &name, &host, port, &protocol, &username, None, "", "", "", None, None) {
                     Ok(_) => imported += 1,
                     Err(e) => errors.push(format!("Row {}: {}", i + 2, e)),
@@ -133,6 +148,9 @@ pub fn cmd_import_json(state: State<AppState>, path: String) -> Result<(usize, V
             let username = s["username"].as_str().unwrap_or("").trim().to_string();
             let tags = s["tags"].as_str().unwrap_or("").to_string();
             let notes = s["notes"].as_str().unwrap_or("").to_string();
+            let credential_id = s["credential_id"].as_str().map(|v| v.to_string());
+            let ssh_key_id = s["ssh_key_id"].as_str().map(|v| v.to_string());
+            let description = s["description"].as_str().unwrap_or("").to_string();
 
             if name.is_empty() || host.is_empty() {
                 errors.push(format!("Server {}: name and host required", i + 1));
@@ -158,7 +176,26 @@ pub fn cmd_import_json(state: State<AppState>, path: String) -> Result<(usize, V
                 }
             };
 
-            match operations::create_server(&conn, &name, &host, port, &protocol, &username, None, &tags, &notes, "", None, None) {
+            // Round-trip safety: preserve the credential/ssh-key references that
+            // export_json writes, and do not duplicate an existing server row
+            // (duplicating would detach the auth config from the row the user
+            // actually sees and edits).
+            match operations::find_server_by_identity(&conn, &name, &host, port, &protocol) {
+                Ok(Some(existing_id)) => {
+                    errors.push(format!("Server {}: '{}' already exists, skipped", i + 1, existing_id));
+                    continue;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    errors.push(format!("Server {}: database error - {}", i + 1, e));
+                    continue;
+                }
+            }
+
+            match operations::create_server(
+                &conn, &name, &host, port, &protocol, &username, None, &tags, &notes, &description,
+                credential_id.as_deref(), ssh_key_id.as_deref(),
+            ) {
                 Ok(_) => imported += 1,
                 Err(e) => errors.push(format!("Server {}: {}", i + 1, e)),
             }
