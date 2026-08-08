@@ -5,6 +5,7 @@ import { ModalsProvider } from '@mantine/modals';
 import { Notifications } from '@mantine/notifications';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
+import '@xterm/xterm/css/xterm.css';
 import App from './App';
 import { ThemeBridge } from './ThemeBridge';
 
