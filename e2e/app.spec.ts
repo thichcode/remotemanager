@@ -125,3 +125,50 @@ test('export dialog opens and closes', async ({ page }) => {
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByText('Choose an export format.')).toBeHidden();
 });
+
+test('ssh connect opens embedded terminal tab and streams output', async ({ page }) => {
+  await boot(page, {
+    servers: [makeServer({ id: 'srv-ssh', name: 'web-node', host: '10.0.0.66', username: 'ubuntu', ssh_key_id: 'key-001' })],
+    sshKeys: [{ id: 'key-001', name: 'crewkey', public_key: 'ssh-ed25519 AAAA', created_at: new Date().toISOString() }],
+  });
+
+  await expect(page.getByText('web-node', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Connect server' }).click();
+
+  await expect(page.getByText('ubuntu@10.0.0.66', { exact: true })).toBeVisible();
+  await expect(page.locator('.xterm')).toContainText('mock ssh session ready');
+});
+
+test('ssh terminal sends keystrokes and closes session', async ({ page }) => {
+  await boot(page, {
+    servers: [makeServer({ id: 'srv-ssh', name: 'web-node', host: '10.0.0.66', username: 'ubuntu', ssh_key_id: 'key-001' })],
+    sshKeys: [{ id: 'key-001', name: 'crewkey', public_key: 'ssh-ed25519 AAAA', created_at: new Date().toISOString() }],
+  });
+
+  await page.getByRole('button', { name: 'Connect server' }).click();
+  await expect(page.locator('.xterm')).toBeVisible();
+
+  await page.locator('.xterm').click();
+  await page.keyboard.type('ls');
+  await page.waitForTimeout(300);
+
+  const sessionWrites = await page.evaluate(() => {
+    const db = localStorage.getItem('rm_mock_db_v1');
+    const parsed = db ? JSON.parse(db) : null;
+    return parsed && parsed.sessions ? Object.values(parsed.sessions) : [];
+  });
+  const hasLs = sessionWrites.some((s: any) => {
+    const bytes = (s.writes || []).flat();
+    return String.fromCharCode(...bytes).includes('ls');
+  });
+  expect(hasLs).toBe(true);
+
+  await page.getByRole('button', { name: /Close terminal/ }).click();
+  await page.waitForTimeout(300);
+  const sessionsAfterClose = await page.evaluate(() => {
+    const db = localStorage.getItem('rm_mock_db_v1');
+    const parsed = db ? JSON.parse(db) : null;
+    return parsed && parsed.sessions ? Object.keys(parsed.sessions) : [];
+  });
+  expect(sessionsAfterClose.length).toBe(0);
+});

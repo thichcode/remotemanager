@@ -22,6 +22,13 @@ export const TAURI_MOCK_BODY = String.raw`(() => {
   const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) { /* ignore */ } };
   const uid = () => (Math.random().toString(36) + Date.now().toString(36)).slice(2, 14);
 
+  const listeners = {};
+  const emit = (event, payload) => {
+    (listeners[event] || []).forEach((cb) => cb({ event, id: 0, payload }));
+  };
+  window.__rm_emit = emit;
+  window.__rm_listeners = listeners;
+
   const serverFromArgs = (a) => {
     const now = new Date().toISOString();
     return {
@@ -103,6 +110,26 @@ export const TAURI_MOCK_BODY = String.raw`(() => {
     cmd_list_recent_servers: () => db.servers.slice(),
     cmd_launch_ssh: () => null,
     cmd_launch_rdp: () => null,
+    cmd_open_ssh_session: (a) => {
+      const sid = 'sess-' + uid();
+      db.sessions = db.sessions || {};
+      db.sessions[sid] = { server_id: a.server_id, writes: [] };
+      setTimeout(() => {
+        emit('ssh://output', { sessionId: sid, data: Array.from(new TextEncoder().encode('mock ssh session ready\r\n')) });
+      }, 50);
+      return sid;
+    },
+    cmd_ssh_write: (a) => {
+      const s = db.sessions && db.sessions[a.session_id];
+      if (s) {
+        s.writes.push(a.data);
+        emit('ssh://output', { sessionId: a.session_id, data: a.data });
+      }
+      return null;
+    },
+    cmd_ssh_resize: () => null,
+    cmd_ssh_close: (a) => { if (db.sessions) delete db.sessions[a.session_id]; return null; },
+    cmd_ssh_close_all: () => { db.sessions = {}; return null; },
     cmd_ping: () => 'Reachable: 0ms',
     cmd_import_csv: () => ({ imported: 0, errors: [] }),
     cmd_import_json: () => ({ imported: 0, errors: [] }),
@@ -114,6 +141,12 @@ export const TAURI_MOCK_BODY = String.raw`(() => {
   const callbacks = new Map();
   window.__TAURI_INTERNALS__ = {
     invoke: (cmd, args) => {
+      if (cmd === 'plugin:event|listen') {
+        const { event, handler } = args || {};
+        (listeners[event] = listeners[event] || []).push((e) => window.__TAURI_INTERNALS__.runCallback(handler, e));
+        return Promise.resolve(Date.now());
+      }
+      if (cmd === 'plugin:event|unlisten') return Promise.resolve(null);
       if (cmd.startsWith('plugin:')) {
         if (cmd.includes('dialog')) return Promise.resolve('/mock/path');
         return Promise.resolve(null);
@@ -142,6 +175,7 @@ export interface MockDbSeed {
   credentials?: any[];
   sshKeys?: any[];
   settings?: any;
+  sessions?: any;
 }
 
 export function seedDb(seed: MockDbSeed = {}) {
@@ -152,6 +186,7 @@ export function seedDb(seed: MockDbSeed = {}) {
       credentials: seed.credentials || [],
       sshKeys: seed.sshKeys || [],
       settings: seed.settings || { id: 1, theme: 'dark', font_size: 14, ssh_port: 22, rdp_fullscreen: false, rdp_admin_mode: false },
+      sessions: seed.sessions || {},
     },
   };
 }
