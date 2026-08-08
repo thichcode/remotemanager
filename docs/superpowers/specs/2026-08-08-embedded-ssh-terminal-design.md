@@ -55,11 +55,12 @@ Event payloads (camelCase keys, matching Tauri event convention on frontend):
   - `openSshSession(args)`, `sshWrite(sessionId, data)`, `sshResize(sessionId, cols, rows)`, `sshClose(sessionId)`, `sshCloseAll()`
   - `listSshSessions()` not required
 - `src/components/Layout.tsx` — tab bar
-  - Terminal section (tab bar + active terminal) lives in `AppShell.Main`, mounted once and hidden/shown by CSS based on view — **never unmounted** while tabs exist, so `cmd_ssh_close` is not triggered by a view switch
-  - When `terminalTabs.length > 0`: tab bar renders at top of main area, and the active tab's `Terminal` fills the main content (replacing `ServerList`)
-  - When no tabs exist: tab bar hidden, `ServerList` fills the main area
+  - When `terminalTabs.length > 0`, the Servers view becomes a split layout: `ServerList` stays on the left (narrower column), and the terminal section (tab bar + active terminal) occupies the right column. This keeps the list accessible so more sessions can be opened without closing existing tabs.
+  - Terminal section (tab bar + all terminal panes) lives in the right column, mounted once and hidden/shown by CSS based on view and active tab — **never unmounted** while a tab exists, so `cmd_ssh_close` is not triggered by switching tabs or views
+  - All `Terminal` components stay mounted; inactive tabs are hidden via `display:none`; the active tab's `Terminal` receives an `active` prop and calls `fit()` when it becomes active
+  - Tab bar (Mantine `Tabs`) at the top of the right column; each tab shows `user@host` with a close button
   - One active tab at all times while tabs exist
-  - Switching to Keys/Credentials/Settings hides the terminal section via `display:none` but keeps sessions alive (component stays mounted)
+  - Switching to Keys/Credentials/Settings hides the terminal section via `display:none` but keeps sessions alive (components stay mounted)
 - `src/components/ServerList.tsx` — connect integration
   - `handleConnect` for SSH → `openTerminalTab(server)` (instead of `launchSsh`)
   - Add "Open in external terminal" to the actions menu → `launchSsh`
