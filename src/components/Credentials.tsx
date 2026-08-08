@@ -109,12 +109,12 @@ export function Credentials() {
               </div>
               <Group gap="xs">
                 <Tooltip label="Edit">
-                  <ActionIcon size="sm" variant="light" onClick={() => openEdit(cred)}>
+                  <ActionIcon size="sm" variant="light" aria-label="Edit credential" onClick={() => openEdit(cred)}>
                     <IconPencil size={14} />
                   </ActionIcon>
                 </Tooltip>
                 <Tooltip label="Delete">
-                  <ActionIcon size="sm" color="red" variant="light" onClick={() => handleDelete(cred)}>
+                  <ActionIcon size="sm" color="red" variant="light" aria-label="Delete credential" onClick={() => handleDelete(cred)}>
                     <IconTrash size={14} />
                   </ActionIcon>
                 </Tooltip>

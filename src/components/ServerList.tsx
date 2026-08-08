@@ -190,7 +190,7 @@ export function ServerList() {
           <Tooltip label="Export CSV/JSON">
             <Button size="xs" variant="light" leftSection={<IconDownload size={14} />} onClick={() => setExportModalOpen(true)}>Export</Button>
           </Tooltip>
-          <ActionIcon variant="filled" onClick={openCreateModal}>
+          <ActionIcon variant="filled" aria-label="Add server" onClick={openCreateModal}>
             <IconPlus size={16} />
           </ActionIcon>
         </Group>
@@ -208,6 +208,7 @@ export function ServerList() {
                 <ActionIcon
                   size="sm"
                   variant="subtle"
+                  aria-label="Toggle favorite"
                   onClick={() => toggleFavorite(server.id)}
                 >
                   {server.favorite
@@ -231,23 +232,23 @@ export function ServerList() {
               </Group>
               <Group gap="xs">
                 <Tooltip label="Edit">
-                  <ActionIcon size="sm" variant="light" onClick={() => openEditModal(server)}>
+                  <ActionIcon size="sm" variant="light" aria-label="Edit server" onClick={() => openEditModal(server)}>
                     <IconPencil size={14} />
                   </ActionIcon>
                 </Tooltip>
                 <Tooltip label="Connect">
-                  <ActionIcon size="sm" variant="light" onClick={() => handleConnect(server)}>
+                  <ActionIcon size="sm" variant="light" aria-label="Connect server" onClick={() => handleConnect(server)}>
                     <IconPlayerPlay size={14} />
                   </ActionIcon>
                 </Tooltip>
                 <Tooltip label="Ping">
-                  <ActionIcon size="sm" variant="light" onClick={() => handlePing(server.host)}>
+                  <ActionIcon size="sm" variant="light" aria-label="Ping server" onClick={() => handlePing(server.host)}>
                     <IconActivity size={14} />
                   </ActionIcon>
                 </Tooltip>
                 <Menu position="bottom-end">
                   <Menu.Target>
-                    <ActionIcon size="sm" variant="light">
+                    <ActionIcon size="sm" variant="light" aria-label="Server actions">
                       <IconDots size={14} />
                     </ActionIcon>
                   </Menu.Target>

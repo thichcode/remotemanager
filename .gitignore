@@ -29,3 +29,8 @@ npm-debug.log*
 src-tauri/.tauri-signing.key
 *.rmbackup
 src-tauri/gen/schemas
+
+# Playwright
+test-results
+playwright-report
+.e2e-*

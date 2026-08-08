@@ -181,20 +181,10 @@ export function Sidebar() {
       <Stack gap={4}>
         <Group justify="space-between" align="center">
           <Text size="xs" fw={600} c="dimmed" tt="uppercase">Groups</Text>
-          <ActionIcon size="sm" variant="subtle" onClick={handleAddGroup}>
+          <ActionIcon size="sm" variant="subtle" aria-label="Add group" onClick={handleAddGroup}>
             <IconPlus size={14} />
           </ActionIcon>
         </Group>
-
-        {newGroupName.length === 0 && (
-          <TextInput
-            size="xs"
-            placeholder="New group name + Enter"
-            value={newGroupName}
-            onChange={(e) => setNewGroupName(e.currentTarget.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAddGroup(); }}
-          />
-        )}
 
         {rootGroups.length === 0 ? (
           <Text size="xs" c="dimmed" p="xs">No groups yet. Create one to organize servers.</Text>
@@ -203,6 +193,14 @@ export function Sidebar() {
             <GroupNode key={group.id} group={group} depth={0} />
           ))
         )}
+        <TextInput
+          size="xs"
+          placeholder="New group name + Enter"
+          value={newGroupName}
+          onChange={(e) => setNewGroupName(e.currentTarget.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleAddGroup(); }}
+          mt="xs"
+        />
       </Stack>
     </Box>
   );
