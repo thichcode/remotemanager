@@ -30,6 +30,9 @@ impl SessionManager {
         g.get_mut(id).map(f)
     }
 
+    /// Number of live sessions. No production caller yet; exercised by the
+    /// test suite and likely useful later (e.g. a session-count badge).
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.sessions.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
@@ -63,9 +66,8 @@ mod tests {
         assert_eq!(m.len(), 0);
         m.insert("a".into(), dummy_child());
         assert_eq!(m.len(), 1);
-        if let Some(mut child) = m.remove("a") {
-            let _ = child.kill();
-            let _ = child.wait();
+        if let Some(child) = m.remove("a") {
+            kill_wait(child);
         }
     }
 
@@ -101,9 +103,31 @@ mod tests {
             }
         }
         assert_eq!(m.len(), 1);
-        let mut child = m.remove("a").unwrap();
-        let _ = child.kill();
-        let _ = child.wait();
+        let child = m.remove("a").unwrap();
+        kill_wait(child);
         assert_eq!(m.len(), 0);
+    }
+
+    #[test]
+    fn with_child_writes_to_stdin() {
+        let m = SessionManager::new();
+        m.insert("a".into(), dummy_child());
+        let wrote = m.with_child("a", |c| {
+            use std::io::Write;
+            match c.stdin.as_mut() {
+                Some(stdin) => stdin.write_all(b"hello\n").is_ok(),
+                None => false,
+            }
+        });
+        assert_eq!(wrote, Some(true));
+        if let Some(child) = m.remove("a") {
+            kill_wait(child);
+        }
+    }
+
+    #[test]
+    fn with_child_missing_returns_none() {
+        let m = SessionManager::new();
+        assert!(m.with_child("nope", |_| ()).is_none());
     }
 }

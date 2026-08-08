@@ -96,8 +96,8 @@ pub fn cmd_open_ssh_session(
 
     let mut child = cmd.spawn().map_err(|e| format!("Failed to launch SSH: {}", e))?;
 
-    let stdout = child.stdout.take().expect("stdout piped");
-    let stderr = child.stderr.take().expect("stderr piped");
+    let stdout = child.stdout.take().ok_or("Failed to capture ssh stdout")?;
+    let stderr = child.stderr.take().ok_or("Failed to capture ssh stderr")?;
     let session_id = Uuid::new_v4().to_string();
 
     state.sessions.insert(session_id.clone(), child);
@@ -111,14 +111,39 @@ pub fn cmd_open_ssh_session(
 #[tauri::command(rename_all = "snake_case")]
 pub fn cmd_ssh_write(state: State<AppState>, session_id: String, data: Vec<u8>) -> Result<(), String> {
     use std::io::Write;
-    let ok = state.sessions.with_child(&session_id, |child| {
-        if let Some(stdin) = child.stdin.as_mut() {
-            stdin.write_all(&data).map_err(|e| e.to_string())
-        } else {
-            Ok(())
+    use std::time::Instant;
+    const CHUNK: usize = 4096;
+    const BUDGET: Duration = Duration::from_millis(2000);
+
+    state.sessions.with_child(&session_id, |child| {
+        let stdin = child.stdin.as_mut().ok_or("Session has no stdin")?;
+        let deadline = Instant::now() + BUDGET;
+        let mut offset = 0usize;
+        while offset < data.len() {
+            let end = (offset + CHUNK).min(data.len());
+            match stdin.write(&data[offset..end]) {
+                Ok(0) => {
+                    if Instant::now() >= deadline {
+                        return Err("Session stdin is stalled".to_string());
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Ok(n) => offset += n,
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::WouldBlock {
+                        if Instant::now() >= deadline {
+                            return Err("Session stdin is stalled".to_string());
+                        }
+                        std::thread::sleep(Duration::from_millis(10));
+                    } else {
+                        return Err(e.to_string());
+                    }
+                }
+            }
         }
-    }).ok_or("Session not found")?;
-    ok
+        Ok(())
+    })
+    .ok_or("Session not found")?
 }
 
 #[tauri::command(rename_all = "snake_case")]
