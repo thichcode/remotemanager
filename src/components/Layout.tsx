@@ -1,7 +1,6 @@
 import { AppShell, Group, Text, SegmentedControl, Tabs, ActionIcon } from '@mantine/core';
 import { IconX, IconServer } from '@tabler/icons-react';
 import { Sidebar } from './Sidebar';
-import { ServerList } from './ServerList';
 import { SearchBar } from './SearchBar';
 import { SshKeys } from './SshKeys';
 import { Settings } from './Settings';
@@ -21,7 +20,7 @@ export function Layout() {
   return (
     <AppShell
       header={{ height: 50 }}
-      navbar={{ width: 250, breakpoint: 'sm' }}
+      navbar={{ width: 280, breakpoint: 'sm' }}
       padding="md"
     >
       <AppShell.Header>
@@ -56,20 +55,7 @@ export function Layout() {
             height: 'calc(100dvh - var(--app-shell-header-offset, 0px) - var(--app-shell-footer-offset, 0px) - calc(var(--app-shell-padding, 0px) * 2))',
           }}
         >
-          {!showTabs && (
-            <div style={{ height: '100%', display: 'flex', gap: 16 }}>
-              <div style={{ width: 320, flexShrink: 0, overflowY: 'auto', borderRight: '1px solid var(--mantine-color-dark-4)', paddingRight: 16 }}>
-                <ServerList />
-              </div>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Group c="dimmed" gap="md">
-                  <IconServer size={32} style={{ opacity: 0.3 }} />
-                  <Text>Select a server to connect</Text>
-                </Group>
-              </div>
-            </div>
-          )}
-          {showTabs && (
+          {showTabs ? (
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <Tabs value={activeSessionTabId ?? undefined} onChange={(v) => v && focusSessionTab(v)} variant="outline">
                 <Tabs.List>
@@ -104,6 +90,13 @@ export function Layout() {
                   </div>
                 ))}
               </div>
+            </div>
+          ) : (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Group c="dimmed" gap="md">
+                <IconServer size={32} style={{ opacity: 0.3 }} />
+                <Text>Select a server from the sidebar to connect</Text>
+              </Group>
             </div>
           )}
         </div>

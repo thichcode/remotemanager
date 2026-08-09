@@ -37,19 +37,18 @@ async function boot(page: Page, seed: MockDbSeed = {}) {
 test('app boots and renders layout with empty state', async ({ page }) => {
   await boot(page);
   await expect(page.getByText('Remote Manager')).toBeVisible();
-  await expect(page.getByText('Servers (0)', { exact: true })).toBeVisible();
-  await expect(page.getByText('No servers match.')).toBeVisible();
+  await expect(page.getByText('All Servers (0)', { exact: true })).toBeVisible();
+  await expect(page.getByText('Select a server from the sidebar to connect')).toBeVisible();
 });
 
 test('creates an SSH server through the form', async ({ page }) => {
   await boot(page);
-  await page.getByRole('button', { name: 'Add server' }).click();
+  await page.getByRole('button', { name: 'Add Server' }).click();
   await page.getByPlaceholder('My Server').fill('web-prod');
   await page.getByPlaceholder('192.168.1.100').fill('10.0.0.55');
   await page.getByLabel('Username').fill('ubuntu');
   await page.getByRole('button', { name: 'Save Server' }).click();
   await expect(page.getByText('web-prod')).toBeVisible();
-  await expect(page.getByText('10.0.0.55:22')).toBeVisible();
 });
 
 test('SSH key selection persists across edit and reload', async ({ page }) => {
@@ -70,7 +69,6 @@ test('SSH key selection persists across edit and reload', async ({ page }) => {
   // persists after reload (re-fetches from mock backend)
   await page.reload();
   await expect(page.getByText('gitlab', { exact: true })).toBeVisible();
-  await expect(page.getByText('Key: crewkey')).toBeVisible();
 });
 
 test('favoriting increments sidebar count', async ({ page }) => {

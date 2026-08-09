@@ -1,105 +1,35 @@
-import { Box, Text, Group, ActionIcon, Stack, Divider, TextInput, Button } from '@mantine/core';
-import { IconPlus, IconServer, IconStar, IconClock, IconTrash, IconPencil, IconFolder, IconChevronRight } from '@tabler/icons-react';
+import { Box, Text, Group, ActionIcon, Stack, Divider, TextInput, Button, Modal, SegmentedControl } from '@mantine/core';
+import { IconPlus, IconServer, IconStar, IconClock, IconTrash, IconFolder, IconChevronRight, IconDownload } from '@tabler/icons-react';
 import { useStore } from '../store/useStore';
 import { useState } from 'react';
-import { launchSsh, launchRdp } from '../services/tauri';
+import { launchSsh, launchRdp, exportCsv, exportJson } from '../services/tauri';
 import { notifications } from '@mantine/notifications';
 import { modals } from '@mantine/modals';
+import { open, save } from '@tauri-apps/plugin-dialog';
+import { GroupServerTree } from './GroupServerTree';
+import { ServerForm } from './ServerForm';
 import type { HistoryEntry } from '../types';
 
-function GroupNode({ group, depth }: { group: { id: string; name: string }, depth: number }) {
-  const { selectedGroupId, setSelectedGroup, deleteGroup, updateGroup } = useStore();
-  const [addingChild, setAddingChild] = useState(false);
-  const [childName, setChildName] = useState('');
-
-  const handleRename = () => {
-    modals.open({
-      title: `Rename "${group.name}"`,
-      children: <RenameGroupForm currentName={group.name} onSave={(name) => updateGroup(group.id, name)} />,
-      size: 'sm',
-    });
-  };
-
-  const handleDelete = () => {
-    modals.openConfirmModal({
-      title: 'Delete Group',
-      children: <Text size="sm">Delete "{group.name}"? Servers in it will become ungrouped.</Text>,
-      labels: { confirm: 'Delete', cancel: 'Cancel' },
-      confirmProps: { color: 'red' },
-      onConfirm: () => deleteGroup(group.id),
-    });
-  };
-
-  const handleAddChild = async () => {
-    if (childName.trim()) {
-      await createChild(group.id, childName.trim());
-      setChildName('');
-      setAddingChild(false);
-    }
-  };
-
-  const { createGroup } = useStore();
-  const createChild = async (parentId: string, name: string) => {
-    await createGroup(name, parentId);
-  };
-
-  return (
-    <Box>
-      <Group
-        gap={6}
-        p="xs"
-        pl={depth * 12 + 8}
-        style={{ cursor: 'pointer', borderRadius: 4 }}
-        bg={selectedGroupId === group.id ? 'var(--mantine-color-dark-5)' : undefined}
-      >
-        <IconChevronRight size={12} />
-        <IconFolder size={14} />
-        <Text size="sm" style={{ flex: 1 }} onClick={() => setSelectedGroup(group.id)}>{group.name}</Text>
-        <ActionIcon size="sm" variant="subtle" onClick={() => setAddingChild(v => !v)}>
-          <IconPlus size={12} />
-        </ActionIcon>
-        <ActionIcon size="sm" variant="subtle" onClick={handleRename}>
-          <IconPencil size={12} />
-        </ActionIcon>
-        <ActionIcon size="sm" variant="subtle" color="red" onClick={handleDelete}>
-          <IconTrash size={12} />
-        </ActionIcon>
-      </Group>
-      {addingChild && (
-        <Group gap={6} pl={depth * 12 + 16} pb="xs">
-          <TextInput
-            size="xs"
-            placeholder="Sub-group name"
-            value={childName}
-            onChange={(e) => setChildName(e.currentTarget.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAddChild(); }}
-            style={{ flex: 1 }}
-          />
-        </Group>
-      )}
-    </Box>
-  );
-}
-
-function RenameGroupForm({ currentName, onSave }: { currentName: string; onSave: (name: string) => void }) {
-  const [name, setName] = useState(currentName);
-  return (
-    <Stack>
-      <TextInput label="Group Name" value={name} onChange={(e) => setName(e.currentTarget.value)} />
-      <Group justify="flex-end">
-        <Button variant="subtle" onClick={() => modals.closeAll()}>Cancel</Button>
-        <Button onClick={() => { onSave(name.trim()); modals.closeAll(); }} disabled={!name.trim()}>Save</Button>
-      </Group>
-    </Stack>
-  );
-}
-
 export function Sidebar() {
-  const { groups, servers, settings, selectedGroupId, setSelectedGroup, createGroup, history, clearHistory } = useStore();
+  const {
+    groups, servers, settings, selectedGroupId, setSelectedGroup,
+    createGroup, history, clearHistory, expandedGroups, toggleGroupExpanded,
+  } = useStore();
   const [newGroupName, setNewGroupName] = useState('');
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
 
   const favorites = servers.filter(s => s.favorite);
   const rootGroups = groups.filter(g => !g.parent_id);
+
+  // Group servers by group_id
+  const groupedServers = new Map<string, Server[]>();
+  for (const s of servers) {
+    const gid = s.group_id ?? '__ungrouped__';
+    if (!groupedServers.has(gid)) groupedServers.set(gid, []);
+    groupedServers.get(gid)!.push(s);
+  }
+  const ungroupedServers = groupedServers.get('__ungrouped__') ?? [];
 
   const handleAddGroup = async () => {
     if (newGroupName.trim()) {
@@ -189,10 +119,38 @@ export function Sidebar() {
         {rootGroups.length === 0 ? (
           <Text size="xs" c="dimmed" p="xs">No groups yet. Create one to organize servers.</Text>
         ) : (
-          rootGroups.map(group => (
-            <GroupNode key={group.id} group={group} depth={0} />
-          ))
+          rootGroups.map(group => {
+            const isExpanded = expandedGroups[group.id] ?? false;
+            const groupSrvs = groupedServers.get(group.id) ?? [];
+            return (
+              <Box key={group.id}>
+                <Group
+                  gap={6}
+                  p="xs"
+                  style={{ cursor: 'pointer', borderRadius: 4 }}
+                  bg={selectedGroupId === group.id ? 'var(--mantine-color-dark-5)' : undefined}
+                  onClick={() => { setSelectedGroup(group.id); toggleGroupExpanded(group.id); }}
+                >
+                  <IconChevronRight
+                    size={12}
+                    style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}
+                  />
+                  <IconFolder size={14} />
+                  <Text size="sm" style={{ flex: 1 }}>{group.name}</Text>
+                </Group>
+                {isExpanded && <GroupServerTree servers={groupSrvs} />}
+              </Box>
+            );
+          })
         )}
+
+        {ungroupedServers.length > 0 && (
+          <Box>
+            <Text size="xs" c="dimmed" p="xs">Ungrouped</Text>
+            <GroupServerTree servers={ungroupedServers} />
+          </Box>
+        )}
+
         <TextInput
           size="xs"
           placeholder="New group name + Enter"
@@ -202,6 +160,59 @@ export function Sidebar() {
           mt="xs"
         />
       </Stack>
+
+      <Divider my="md" />
+
+      <Button
+        size="xs"
+        variant="light"
+        leftSection={<IconPlus size={14} />}
+        fullWidth
+        onClick={() => modals.open({ title: 'Add Server', children: <ServerForm />, size: 'lg' })}
+      >
+        Add Server
+      </Button>
+
+      <Button
+        size="xs"
+        variant="light"
+        leftSection={<IconDownload size={14} />}
+        fullWidth
+        mt="xs"
+        onClick={() => setExportModalOpen(true)}
+      >
+        Export
+      </Button>
+
+      <Modal opened={exportModalOpen} onClose={() => setExportModalOpen(false)} title="Export Servers" centered>
+        <Stack>
+          <Text size="sm" c="dimmed">Choose an export format. All servers will be written to the selected file.</Text>
+          <SegmentedControl
+            value={exportFormat}
+            onChange={(v) => setExportFormat(v as 'csv' | 'json')}
+            data={[{ label: 'CSV', value: 'csv' }, { label: 'JSON', value: 'json' }]}
+          />
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={() => setExportModalOpen(false)}>Cancel</Button>
+            <Button onClick={async () => {
+              try {
+                const path = await save({
+                  defaultPath: `remote-managers.${exportFormat}`,
+                  filters: [{ name: 'Export Files', extensions: [exportFormat] }],
+                });
+                if (path) {
+                  if (exportFormat === 'csv') await exportCsv(path);
+                  else await exportJson(path);
+                  setExportModalOpen(false);
+                  notifications.show({ title: 'Exported', message: 'Data exported successfully', color: 'green' });
+                }
+              } catch (e: any) {
+                notifications.show({ title: 'Export Failed', message: e.toString(), color: 'red' });
+              }
+            }}>Choose File & Export</Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Box>
   );
 }
