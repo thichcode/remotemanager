@@ -1,6 +1,6 @@
 [package]
 name = "remote-manager-mvp"
-version = "0.3.14"
+version = "0.3.15"
 description = "Remote Manager for Windows SysAdmin"
 authors = ["you"]
 license = ""
