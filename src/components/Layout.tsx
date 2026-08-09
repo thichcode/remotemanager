@@ -51,16 +51,15 @@ export function Layout() {
         {/* Servers view: kept mounted always so terminal sessions survive view switches */}
         <div
           style={{
-            display: view === 'servers' ? 'flex' : 'none',
-            gap: 16,
+            display: view === 'servers' ? 'block' : 'none',
             height: 'calc(100dvh - var(--app-shell-header-offset, 0px) - var(--app-shell-footer-offset, 0px) - calc(var(--app-shell-padding, 0px) * 2))',
           }}
         >
-          <div style={{ flex: showTerminal ? '0 0 40%' : '1 1 auto', minWidth: 0, overflowY: 'auto' }}>
+          <div style={{ display: showTerminal ? 'none' : 'block', height: '100%', overflowY: 'auto' }}>
             <ServerList />
           </div>
           {showTerminal && (
-            <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <Tabs value={activeTerminalTabId ?? undefined} onChange={(v) => v && focusTerminalTab(v)} variant="outline">
                 <Tabs.List>
                   {terminalTabs.map((tab) => (
