@@ -3,6 +3,7 @@ mod commands;
 mod db;
 mod history;
 mod paths;
+pub mod rdp;
 mod security;
 mod sessions;
 mod sshkeys;
@@ -26,6 +27,7 @@ pub fn run() {
     let state = AppState {
         db: std::sync::Mutex::new(conn),
         sessions: std::sync::Arc::new(crate::sessions::SessionManager::new()),
+        rdp_sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
     };
 
     let app = tauri::Builder::default()
@@ -48,9 +50,8 @@ pub fn run() {
             commands::groups::cmd_list_groups,
             commands::ssh::cmd_launch_ssh,
             commands::ssh::cmd_launch_rdp,
-            commands::ssh::cmd_launch_rdp_session,
-            commands::ssh::cmd_rdp_process_alive,
-            commands::ssh::cmd_rdp_kill_process,
+            commands::ssh::cmd_open_rdp_session,
+            commands::ssh::cmd_close_rdp_session,
             commands::ssh::cmd_ping,
             commands::credentials::cmd_create_credential,
             commands::credentials::cmd_update_credential,
@@ -88,6 +89,12 @@ pub fn run() {
     app.run(|app_handle, event| {
         if let tauri::RunEvent::ExitRequested { .. } = event {
             if let Some(state) = app_handle.try_state::<AppState>() {
+                // Close all embedded RDP sessions
+                if let Ok(mut rdp_sessions) = state.rdp_sessions.lock() {
+                    for (_, shutdown) in rdp_sessions.drain() {
+                        let _ = shutdown.send(());
+                    }
+                }
                 let _ = crate::commands::sessions::cmd_ssh_close_all(state);
             }
         }

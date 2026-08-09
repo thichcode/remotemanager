@@ -2,12 +2,14 @@ pub mod operations;
 pub mod schema;
 
 use rusqlite::Connection;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 
 pub struct AppState {
     pub db: Mutex<Connection>,
     pub sessions: Arc<crate::sessions::SessionManager>,
+    pub rdp_sessions: Mutex<HashMap<u16, tokio::sync::oneshot::Sender<()>>>,
 }
 
 pub fn get_db_path() -> PathBuf {

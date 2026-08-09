@@ -49,7 +49,6 @@ interface AppState {
   openRdpTab: (server: Server) => Promise<void>;
   closeSessionTab: (id: string) => Promise<void>;
   focusSessionTab: (id: string) => void;
-  _startRdpPoll: (tabId: string, pid: number) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -246,7 +245,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({
       sessionTabs: [
         ...get().sessionTabs,
-        { id: tabId, title: `${server.username || 'user'}@${server.host}`, protocol: 'ssh', serverId: server.id, sessionId: null, processId: null, status: 'connecting' },
+        { id: tabId, title: `${server.username || 'user'}@${server.host}`, protocol: 'ssh', serverId: server.id, sessionId: null, wsPort: null, status: 'connecting' },
       ],
       activeSessionTabId: tabId,
     });
@@ -284,12 +283,12 @@ export const useStore = create<AppState>((set, get) => ({
     set({
       sessionTabs: [
         ...get().sessionTabs,
-        { id: tabId, title: server.name, protocol: 'rdp', serverId: server.id, sessionId: null, processId: null, status: 'connecting' },
+        { id: tabId, title: server.name, protocol: 'rdp', serverId: server.id, sessionId: null, wsPort: null, status: 'connecting' },
       ],
       activeSessionTabId: tabId,
     });
     try {
-      const pid = await api.openRdpSession({
+      const wsPort = await api.openRdpSession({
         host: server.host,
         username: server.username,
         fullscreen: get().settings?.rdp_fullscreen ?? false,
@@ -299,15 +298,14 @@ export const useStore = create<AppState>((set, get) => ({
         credentialId: server.credential_id,
       });
       if (!get().sessionTabs.some(t => t.id === tabId)) {
-        try { await api.rdpKillProcess(pid); } catch {}
+        try { await api.closeRdpSession(wsPort); } catch {}
         return;
       }
       set({
         sessionTabs: get().sessionTabs.map(t =>
-          t.id === tabId ? { ...t, processId: pid, status: 'connected' } : t
+          t.id === tabId ? { ...t, wsPort, status: 'connected' } : t
         ),
       });
-      get()._startRdpPoll(tabId, pid);
     } catch (e) {
       set({
         sessionTabs: get().sessionTabs.map(t =>
@@ -316,27 +314,6 @@ export const useStore = create<AppState>((set, get) => ({
       });
       throw e;
     }
-  },
-
-  _startRdpPoll: (tabId: string, pid: number) => {
-    const poll = async () => {
-      const { sessionTabs } = get();
-      const tab = sessionTabs.find(t => t.id === tabId);
-      if (!tab || tab.status === 'closed') return;
-      try {
-        const alive = await api.rdpProcessAlive(pid);
-        if (!alive) {
-          set({
-            sessionTabs: get().sessionTabs.map(t =>
-              t.id === tabId ? { ...t, status: 'closed' } : t
-            ),
-          });
-          return;
-        }
-      } catch {}
-      setTimeout(poll, 2000);
-    };
-    setTimeout(poll, 2000);
   },
 
   closeSessionTab: async (id) => {
@@ -352,8 +329,8 @@ export const useStore = create<AppState>((set, get) => ({
     if (tab?.protocol === 'ssh' && tab.sessionId) {
       try { await api.sshClose(tab.sessionId); } catch {}
     }
-    if (tab?.protocol === 'rdp' && tab.processId) {
-      try { await api.rdpKillProcess(tab.processId); } catch {}
+    if (tab?.protocol === 'rdp' && tab.wsPort) {
+      try { await api.closeRdpSession(tab.wsPort); } catch {}
     }
   },
 

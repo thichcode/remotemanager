@@ -1,6 +1,6 @@
 [package]
 name = "remote-manager-mvp"
-version = "0.3.15"
+version = "0.4.0"
 description = "Remote Manager for Windows SysAdmin"
 authors = ["you"]
 license = ""
@@ -31,6 +31,10 @@ portable-pty = "0.9"
 tauri-plugin-updater = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
+tungstenite = "0.24"
+rdp-rs = "0.1"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

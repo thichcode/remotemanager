@@ -6,7 +6,7 @@ import { SshKeys } from './SshKeys';
 import { Settings } from './Settings';
 import { Credentials } from './Credentials';
 import { Terminal } from './Terminal';
-import { RdpSession } from './RdpSession';
+import { RdpCanvas } from './RdpCanvas';
 import { useStore } from '../store/useStore';
 import { useState } from 'react';
 
@@ -88,7 +88,7 @@ export function Layout() {
                     {tab.protocol === 'ssh' ? (
                       <Terminal tab={tab} active={tab.id === activeSessionTabId} />
                     ) : (
-                      <RdpSession tab={tab} />
+                      <RdpCanvas tab={tab} />
                     )}
                   </div>
                 ))}

@@ -79,6 +79,6 @@ export interface SessionTab {
   protocol: 'ssh' | 'rdp';
   serverId: string | null;
   sessionId: string | null;
-  processId: number | null;
+  wsPort: number | null;
   status: 'connecting' | 'connected' | 'closed';
 }
