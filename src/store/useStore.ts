@@ -69,16 +69,18 @@ export const useStore = create<AppState>((set, get) => ({
 
   loadServers: async () => {
     try {
+      set({ isLoading: true });
       const groupId = get().selectedGroupId;
       if (groupId === FAVORITES_ID) {
         const all = await api.listServers(null);
-        set({ servers: all.filter(s => s.favorite) });
+        set({ servers: all.filter(s => s.favorite), isLoading: false });
         return;
       }
       const servers = await api.listServers(groupId);
-      set({ servers });
+      set({ servers, isLoading: false });
     } catch (e: unknown) {
       console.error('Failed to load servers:', e);
+      set({ isLoading: false });
     }
   },
 

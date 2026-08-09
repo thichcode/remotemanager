@@ -154,7 +154,7 @@ export const listRecentServers = (limit?: number): Promise<Server[]> =>
 // Backup/Restore
 export const backup = (path: string): Promise<BackupSummary> =>
   invoke('cmd_backup', { path });
-export const restore = (path: string): Promise<void> =>
+export const restore = (path: string): Promise<string> =>
   invoke('cmd_restore', { path });
 
 // SSH Sessions

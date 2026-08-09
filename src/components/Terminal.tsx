@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { listen } from '@tauri-apps/api/event';
 import { sshWrite, sshResize } from '../services/tauri';
 import { Stack, Text } from '@mantine/core';
+import { useStore } from '../store/useStore';
 import type { SessionTab } from '../types';
 
 interface Props {
@@ -17,6 +18,7 @@ export function Terminal({ tab, active }: Props) {
   const fitRef = useRef<FitAddon | null>(null);
   const sessionRef = useRef<string | null>(tab.sessionId);
   const pendingRef = useRef<number[][]>([]);
+  const fontSize = useStore((s) => s.settings?.font_size ?? 13);
 
   useEffect(() => {
     sessionRef.current = tab.sessionId;
@@ -35,7 +37,7 @@ export function Terminal({ tab, active }: Props) {
     const term = new XTerm({
       convertEol: true,
       fontFamily: 'Consolas, monospace',
-      fontSize: 13,
+      fontSize,
       cursorBlink: true,
       theme: { background: '#0d1117', foreground: '#e6edf3' },
     });
@@ -109,6 +111,14 @@ export function Terminal({ tab, active }: Props) {
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, [active]);
+
+  // update font size when settings change
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.fontSize = fontSize;
+      fitRef.current?.fit();
+    }
+  }, [fontSize]);
 
   if (tab.status === 'closed' && !tab.sessionId) {
     return (

@@ -81,7 +81,7 @@ export function Settings() {
         label="Theme"
         data={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }]}
         value={settings.theme}
-        onChange={(v) => updateSettings({ ...settings, theme: v as 'light' | 'dark' })}
+        onChange={(v) => { if (v === 'light' || v === 'dark') updateSettings({ ...settings, theme: v }); }}
       />
       <NumberInput
         label="Terminal Font Size"
