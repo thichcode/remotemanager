@@ -5,10 +5,10 @@ import { useState } from 'react';
 import { launchSsh, launchRdp, exportCsv, exportJson } from '../services/tauri';
 import { notifications } from '@mantine/notifications';
 import { modals } from '@mantine/modals';
-import { open, save } from '@tauri-apps/plugin-dialog';
+import { save } from '@tauri-apps/plugin-dialog';
 import { GroupServerTree } from './GroupServerTree';
 import { ServerForm } from './ServerForm';
-import type { HistoryEntry } from '../types';
+import type { HistoryEntry, Server } from '../types';
 
 export function Sidebar() {
   const {
