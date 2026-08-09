@@ -95,7 +95,7 @@ function RenameGroupForm({ currentName, onSave }: { currentName: string; onSave:
 }
 
 export function Sidebar() {
-  const { groups, servers, selectedGroupId, setSelectedGroup, createGroup, history, clearHistory } = useStore();
+  const { groups, servers, settings, selectedGroupId, setSelectedGroup, createGroup, history, clearHistory } = useStore();
   const [newGroupName, setNewGroupName] = useState('');
 
   const favorites = servers.filter(s => s.favorite);
@@ -113,7 +113,7 @@ export function Sidebar() {
       if (entry.protocol === 'ssh') {
         await launchSsh(entry.host, entry.port ?? 22, entry.username, entry.server_id ?? undefined, entry.server_name, entry.ssh_key_id ?? undefined);
       } else {
-        await launchRdp(entry.host, entry.username, false, false, entry.server_id ?? undefined, entry.server_name);
+        await launchRdp(entry.host, entry.username, settings?.rdp_fullscreen ?? false, settings?.rdp_admin_mode ?? false, entry.server_id ?? undefined, entry.server_name);
       }
     } catch (e: any) {
       notifications.show({ title: 'Error', message: e.toString(), color: 'red' });

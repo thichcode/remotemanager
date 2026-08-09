@@ -60,7 +60,15 @@ export const launchRdp = (
   serverName?: string,
   credentialId?: string | null
 ): Promise<void> =>
-  invoke('cmd_launch_rdp', { host, username, fullscreen, adminMode, serverId, serverName, credentialId });
+  invoke('cmd_launch_rdp', {
+    host,
+    username,
+    fullscreen,
+    adminMode,
+    serverId: serverId ?? null,
+    serverName: serverName ?? null,
+    credentialId: credentialId ?? null,
+  });
 
 // Ping
 export const pingHost = (host: string): Promise<string> =>

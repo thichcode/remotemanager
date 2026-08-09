@@ -23,6 +23,23 @@ pub(crate) fn resolve_username(
     Ok(username)
 }
 
+/// Resolve the DPAPI-encrypted password for a credential. Returns the raw
+/// encrypted blob (base64-safe) that mstsc can consume in a `.rdp` file.
+pub(crate) fn resolve_credential_password(
+    state: &tauri::State<crate::db::AppState>,
+    credential_id: Option<&str>,
+) -> Result<Option<String>, String> {
+    let cid = match credential_id {
+        Some(c) if !c.is_empty() => c,
+        _ => return Ok(None),
+    };
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let encrypted = crate::db::operations::get_credential_password(&conn, cid)
+        .map_err(|e| e.to_string())?
+        .ok_or("Credential not found")?;
+    Ok(Some(encrypted))
+}
+
 #[tauri::command]
 pub fn cmd_launch_ssh(
     state: tauri::State<crate::db::AppState>,
@@ -135,6 +152,13 @@ pub fn cmd_launch_rdp(
         rdp_content.push_str("administrative session:i:1\r\n");
     }
 
+    // Resolve DPAPI-encrypted password from credential vault
+    if let Some(encrypted_pw) = resolve_credential_password(&state, credential_id.as_deref())? {
+        use base64::Engine;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(encrypted_pw.as_bytes());
+        rdp_content.push_str(&format!("password 51:b:{}\r\n", encoded));
+    }
+
     // Build a safe temp filename from the validated host (host may contain
     // IPv6 colons and brackets, which are invalid in Windows filenames).
     let safe_host: String = host
@@ -142,21 +166,21 @@ pub fn cmd_launch_rdp(
         .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
         .collect();
     let temp_path = std::env::temp_dir().join(format!("rm_{}.rdp", safe_host));
-    std::fs::write(&temp_path, rdp_content)
+    std::fs::write(&temp_path, &rdp_content)
         .map_err(|e| format!("Failed to create RDP file: {}", e))?;
 
-    Command::new("mstsc.exe")
+    let result = Command::new("mstsc.exe")
         .arg(temp_path.to_str().unwrap())
-        .spawn()
-        .map_err(|e| format!("Failed to launch RDP: {}", e))?;
+        .spawn();
 
-    // Schedule cleanup of temp file (mstsc reads it on launch)
+    // Schedule cleanup of temp file regardless of mstsc launch result
     let cleanup_path = temp_path.clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(5));
         let _ = std::fs::remove_file(&cleanup_path);
     });
 
+    result.map_err(|e| format!("Failed to launch RDP: {}", e))?;
     Ok(())
 }
 

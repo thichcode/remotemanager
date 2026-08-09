@@ -13,7 +13,7 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 import type { Protocol } from '../types';
 
 export function ServerList() {
-  const { servers, credentials, sshKeys, toggleFavorite, selectedGroupId, deleteServer, loadServers, openTerminalTab } = useStore();
+  const { servers, credentials, sshKeys, settings, toggleFavorite, selectedGroupId, deleteServer, loadServers, openTerminalTab } = useStore();
   const [protocolFilter, setProtocolFilter] = useState<Protocol | 'all'>('all');
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
@@ -57,7 +57,7 @@ export function ServerList() {
       if (server.protocol === 'ssh') {
         await openTerminalTab(server);
       } else {
-        await launchRdp(server.host, server.username, false, false, server.id, server.name, server.credential_id);
+        await launchRdp(server.host, server.username, settings?.rdp_fullscreen ?? false, settings?.rdp_admin_mode ?? false, server.id, server.name, server.credential_id);
       }
     } catch (e: any) {
       notifications.show({ title: 'Error', message: e.toString(), color: 'red' });
