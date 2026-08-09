@@ -14,7 +14,13 @@ use tauri::Manager;
 pub fn run() {
     env_logger::init();
 
-    let conn = init_connection();
+    let conn = match init_connection() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("FATAL: {}", e);
+            panic!("Database initialization failed: {}", e);
+        }
+    };
     // Best-effort daily auto-backup (retain last 7). Never blocks startup on failure.
     let _ = backup::auto_backup(&conn, 7);
     let state = AppState {

@@ -239,11 +239,12 @@ pub fn toggle_favorite(conn: &Connection, id: &str) -> rusqlite::Result<bool> {
 }
 
 pub fn search_servers(conn: &Connection, query: &str) -> rusqlite::Result<Vec<ServerRow>> {
-    let pattern = format!("%{}%", query.to_lowercase());
+    let escaped = query.to_lowercase().replace('%', "\\%").replace('_', "\\_");
+    let pattern = format!("%{}%", escaped);
     let mut stmt = conn.prepare(
         &format!(
-            "SELECT {} FROM servers
-             WHERE LOWER(name) LIKE ?1 OR LOWER(host) LIKE ?1 OR LOWER(tags) LIKE ?1
+             "SELECT {} FROM servers
+             WHERE LOWER(name) LIKE ?1 ESCAPE '\\' OR LOWER(host) LIKE ?1 ESCAPE '\\' OR LOWER(tags) LIKE ?1 ESCAPE '\\'
              ORDER BY favorite DESC, name ASC",
             SERVER_COLUMNS
         ),

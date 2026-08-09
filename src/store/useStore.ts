@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { Server, Group, Credential, Settings, HistoryEntry, SshKey, SessionTab } from '../types';
 import * as api from '../services/tauri';
 
+const FAVORITES_ID = '__favorites__';
+
 interface AppState {
   servers: Server[];
   groups: Group[];
@@ -66,34 +68,50 @@ export const useStore = create<AppState>((set, get) => ({
   expandedGroups: {},
 
   loadServers: async () => {
-    const groupId = get().selectedGroupId;
-    if (groupId === '__favorites__') {
-      const all = await api.listServers(null);
-      set({ servers: all.filter(s => s.favorite) });
-      return;
+    try {
+      const groupId = get().selectedGroupId;
+      if (groupId === FAVORITES_ID) {
+        const all = await api.listServers(null);
+        set({ servers: all.filter(s => s.favorite) });
+        return;
+      }
+      const servers = await api.listServers(groupId);
+      set({ servers });
+    } catch (e: unknown) {
+      console.error('Failed to load servers:', e);
     }
-    const servers = await api.listServers(groupId);
-    set({ servers });
   },
 
   loadGroups: async () => {
-    const groups = await api.listGroups();
-    set({ groups });
+    try {
+      const groups = await api.listGroups();
+      set({ groups });
+    } catch (e: unknown) {
+      console.error('Failed to load groups:', e);
+    }
   },
 
   loadCredentials: async () => {
-    const credentials = await api.listCredentials();
-    set({ credentials });
+    try {
+      const credentials = await api.listCredentials();
+      set({ credentials });
+    } catch (e: unknown) {
+      console.error('Failed to load credentials:', e);
+    }
   },
 
   loadSettings: async () => {
-    const settings = await api.getSettings();
-    set({ settings });
+    try {
+      const settings = await api.getSettings();
+      set({ settings });
+    } catch (e: unknown) {
+      console.error('Failed to load settings:', e);
+    }
   },
 
   createServer: async (server) => {
     const id = await api.createServer(server as Server);
-    const created = { ...(server as Server), id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as Server;
+    const created: Server = { ...(server as Server), id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     set({ servers: [...get().servers, created] });
   },
 
@@ -123,7 +141,7 @@ export const useStore = create<AppState>((set, get) => ({
     await api.toggleFavorite(id);
     const gid = get().selectedGroupId;
     set({
-      servers: gid === '__favorites__' && wasFavorite
+      servers: gid === FAVORITES_ID && wasFavorite
         ? get().servers.filter(s => s.id !== id)
         : get().servers.map(s => s.id === id ? { ...s, favorite: !s.favorite } : s),
     });
@@ -178,8 +196,12 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   loadHistory: async () => {
-    const history = await api.listHistory();
-    set({ history });
+    try {
+      const history = await api.listHistory();
+      set({ history });
+    } catch (e: unknown) {
+      console.error('Failed to load history:', e);
+    }
   },
 
   clearHistory: async () => {
@@ -188,8 +210,12 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   loadSshKeys: async () => {
-    const sshKeys = await api.listSshKeys();
-    set({ sshKeys });
+    try {
+      const sshKeys = await api.listSshKeys();
+      set({ sshKeys });
+    } catch (e: unknown) {
+      console.error('Failed to load SSH keys:', e);
+    }
   },
 
   importSshKey: async (path, name, passphrase) => {

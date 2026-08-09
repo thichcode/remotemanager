@@ -14,12 +14,12 @@ pub fn get_db_path() -> PathBuf {
     crate::paths::db_path()
 }
 
-pub fn init_connection() -> Connection {
+pub fn init_connection() -> Result<Connection, String> {
     let path = get_db_path();
-    let conn = Connection::open(&path).expect("Failed to open database");
+    let conn = Connection::open(&path).map_err(|e| format!("Failed to open database at {}: {}", path.display(), e))?;
     conn.pragma_update(None, "journal_mode", "WAL").ok();
     conn.pragma_update(None, "foreign_keys", "ON").ok();
-    schema::create_tables(&conn).expect("Failed to create tables");
-    schema::migrate(&conn).expect("Failed to migrate database");
-    conn
+    schema::create_tables(&conn).map_err(|e| format!("Failed to create tables: {}", e))?;
+    schema::migrate(&conn).map_err(|e| format!("Failed to migrate database: {}", e))?;
+    Ok(conn)
 }

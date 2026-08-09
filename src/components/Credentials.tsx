@@ -7,6 +7,7 @@ import { IconTrash, IconPlus, IconPencil, IconActivity } from '@tabler/icons-rea
 import { useStore } from '../store/useStore';
 import { testCredential } from '../services/tauri';
 import { notifications } from '@mantine/notifications';
+import { modals } from '@mantine/modals';
 import type { Credential } from '../types';
 
 export function Credentials() {
@@ -16,15 +17,15 @@ export function Credentials() {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [testHost, setTestHost] = useState('');
-  const [testing, setTesting] = useState(false);
+  const [testHostMap, setTestHostMap] = useState<Record<string, string>>({});
+  const [testingId, setTestingId] = useState<string | null>(null);
 
   const openCreate = () => {
     setEditing(null);
     setName('');
     setUsername('');
     setPassword('');
-    setTestHost('');
+    setTestHostMap({});
     setModalOpen(true);
   };
 
@@ -33,7 +34,7 @@ export function Credentials() {
     setName(cred.name);
     setUsername(cred.username);
     setPassword('');
-    setTestHost('');
+    setTestHostMap({});
     setModalOpen(true);
   };
 
@@ -51,33 +52,45 @@ export function Credentials() {
       }
       setModalOpen(false);
       notifications.show({ title: 'Saved', message: 'Credential updated', color: 'green' });
-    } catch (e: any) {
-      notifications.show({ title: 'Error', message: e.toString(), color: 'red' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notifications.show({ title: 'Error', message: msg, color: 'red' });
     }
   };
 
   const handleDelete = async (cred: Credential) => {
-    try {
-      await deleteCredential(cred.id);
-      notifications.show({ title: 'Deleted', message: `Credential "${cred.name}" removed`, color: 'green' });
-    } catch (e: any) {
-      notifications.show({ title: 'Error', message: e.toString(), color: 'red' });
-    }
+    modals.openConfirmModal({
+      title: `Delete "${cred.name}"`,
+      children: <Text size="sm">This credential will be removed from all servers that use it. This cannot be undone.</Text>,
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          await deleteCredential(cred.id);
+          notifications.show({ title: 'Deleted', message: `Credential "${cred.name}" removed`, color: 'green' });
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          notifications.show({ title: 'Error', message: msg, color: 'red' });
+        }
+      },
+    });
   };
 
   const handleTest = async (cred: Credential) => {
-    if (!testHost.trim()) {
+    const hostVal = testHostMap[cred.id] ?? '';
+    if (!hostVal.trim()) {
       notifications.show({ title: 'Test Credential', message: 'Enter a host/IP to test against', color: 'yellow' });
       return;
     }
-    setTesting(true);
+    setTestingId(cred.id);
     try {
-      const result = await testCredential(cred.id, testHost.trim());
+      const result = await testCredential(cred.id, hostVal.trim());
       notifications.show({ title: 'Credential Test', message: result, color: result.includes('Reachable') ? 'green' : 'yellow' });
-    } catch (e: any) {
-      notifications.show({ title: 'Test Failed', message: e.toString(), color: 'red' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notifications.show({ title: 'Test Failed', message: msg, color: 'red' });
     } finally {
-      setTesting(false);
+      setTestingId(null);
     }
   };
 
@@ -123,12 +136,12 @@ export function Credentials() {
             <Group mt="sm" align="center">
               <TextInput
                 placeholder="Host to test against (e.g. 192.168.1.100)"
-                value={testHost}
-                onChange={(e) => setTestHost(e.currentTarget.value)}
+                value={testHostMap[cred.id] ?? ''}
+                onChange={(e) => setTestHostMap(prev => ({ ...prev, [cred.id]: e.currentTarget.value }))}
                 size="xs"
                 style={{ flex: 1 }}
               />
-              <Button size="xs" variant="light" leftSection={<IconActivity size={14} />} loading={testing} onClick={() => handleTest(cred)}>
+              <Button size="xs" variant="light" leftSection={<IconActivity size={14} />} loading={testingId === cred.id} onClick={() => handleTest(cred)}>
                 Test
               </Button>
             </Group>

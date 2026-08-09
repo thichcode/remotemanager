@@ -20,8 +20,9 @@ export function GroupServerTree({ servers }: GroupServerTreeProps) {
       } else {
         await openRdpTab(server);
       }
-    } catch (e: any) {
-      notifications.show({ title: 'Error', message: e.toString(), color: 'red' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notifications.show({ title: 'Error', message: msg, color: 'red' });
     }
   };
 

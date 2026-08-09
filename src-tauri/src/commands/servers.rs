@@ -1,5 +1,6 @@
 use tauri::State;
 use crate::db::{AppState, operations};
+use crate::security::input::validate_host;
 
 fn validate_port(port: i32) -> Result<(), String> {
     if port < 1 || port > 65535 {
@@ -29,6 +30,7 @@ pub fn cmd_create_server(
     if host.trim().is_empty() {
         return Err("Host is required".to_string());
     }
+    validate_host(&host)?;
     if protocol != "ssh" && protocol != "rdp" {
         return Err("Protocol must be ssh or rdp".to_string());
     }
@@ -62,6 +64,7 @@ pub fn cmd_update_server(
     if host.trim().is_empty() {
         return Err("Host is required".to_string());
     }
+    validate_host(&host)?;
     validate_port(port)?;
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     operations::update_server(

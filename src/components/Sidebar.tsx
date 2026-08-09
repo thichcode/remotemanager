@@ -10,11 +10,20 @@ import { GroupServerTree } from './GroupServerTree';
 import { ServerForm } from './ServerForm';
 import type { HistoryEntry, Server } from '../types';
 
+const FAVORITES_ID = '__favorites__';
+const UNGROUPED_ID = '__ungrouped__';
+
 export function Sidebar() {
-  const {
-    groups, servers, settings, selectedGroupId, setSelectedGroup,
-    createGroup, history, clearHistory, expandedGroups, toggleGroupExpanded,
-  } = useStore();
+  const groups = useStore((s) => s.groups);
+  const servers = useStore((s) => s.servers);
+  const settings = useStore((s) => s.settings);
+  const selectedGroupId = useStore((s) => s.selectedGroupId);
+  const setSelectedGroup = useStore((s) => s.setSelectedGroup);
+  const createGroup = useStore((s) => s.createGroup);
+  const history = useStore((s) => s.history);
+  const clearHistory = useStore((s) => s.clearHistory);
+  const expandedGroups = useStore((s) => s.expandedGroups);
+  const toggleGroupExpanded = useStore((s) => s.toggleGroupExpanded);
   const [newGroupName, setNewGroupName] = useState('');
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
@@ -25,11 +34,11 @@ export function Sidebar() {
   // Group servers by group_id
   const groupedServers = new Map<string, Server[]>();
   for (const s of servers) {
-    const gid = s.group_id ?? '__ungrouped__';
+    const gid = s.group_id ?? UNGROUPED_ID;
     if (!groupedServers.has(gid)) groupedServers.set(gid, []);
     groupedServers.get(gid)!.push(s);
   }
-  const ungroupedServers = groupedServers.get('__ungrouped__') ?? [];
+  const ungroupedServers = groupedServers.get(UNGROUPED_ID) ?? [];
 
   const handleAddGroup = async () => {
     if (newGroupName.trim()) {
@@ -45,8 +54,9 @@ export function Sidebar() {
       } else {
         await launchRdp(entry.host, entry.username, settings?.rdp_fullscreen ?? false, settings?.rdp_admin_mode ?? false, entry.server_id ?? undefined, entry.server_name);
       }
-    } catch (e: any) {
-      notifications.show({ title: 'Error', message: e.toString(), color: 'red' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notifications.show({ title: 'Error', message: msg, color: 'red' });
     }
   };
 
@@ -60,6 +70,10 @@ export function Sidebar() {
           style={{ cursor: 'pointer', borderRadius: 4 }}
           bg={selectedGroupId === null ? 'var(--mantine-color-dark-5)' : undefined}
           onClick={() => setSelectedGroup(null)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedGroup(null); } }}
+          tabIndex={0}
+          role="button"
+          aria-label="Show all servers"
         >
           <IconServer size={16} />
           <Text size="sm">All Servers ({servers.length})</Text>
@@ -69,8 +83,12 @@ export function Sidebar() {
             gap={8}
             p="xs"
             style={{ cursor: 'pointer', borderRadius: 4 }}
-            bg={selectedGroupId === '__favorites__' ? 'var(--mantine-color-dark-5)' : undefined}
-            onClick={() => setSelectedGroup('__favorites__')}
+            bg={selectedGroupId === FAVORITES_ID ? 'var(--mantine-color-dark-5)' : undefined}
+            onClick={() => setSelectedGroup(FAVORITES_ID)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedGroup(FAVORITES_ID); } }}
+            tabIndex={0}
+            role="button"
+            aria-label="Show favorite servers"
           >
             <IconStar size={16} />
             <Text size="sm">Favorites ({favorites.length})</Text>
@@ -84,7 +102,15 @@ export function Sidebar() {
         <Stack gap={4} mb="md">
           <Group justify="space-between" align="center">
             <Text size="xs" fw={600} c="dimmed" tt="uppercase">Recent</Text>
-            <ActionIcon size="sm" variant="subtle" onClick={clearHistory}>
+            <ActionIcon size="sm" variant="subtle" onClick={() => {
+              modals.openConfirmModal({
+                title: 'Clear History',
+                children: <Text size="sm">This will remove all recent connection history. This cannot be undone.</Text>,
+                labels: { confirm: 'Clear', cancel: 'Cancel' },
+                confirmProps: { color: 'red' },
+                onConfirm: () => clearHistory(),
+              });
+            }}>
               <IconTrash size={14} />
             </ActionIcon>
           </Group>
@@ -95,6 +121,10 @@ export function Sidebar() {
               p="xs"
               style={{ cursor: 'pointer', borderRadius: 4 }}
               onClick={() => handleReconnect(entry)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleReconnect(entry); } }}
+              tabIndex={0}
+              role="button"
+              aria-label={`Reconnect to ${entry.server_name}`}
             >
               <IconClock size={14} />
               <Box style={{ flex: 1 }}>
@@ -130,6 +160,11 @@ export function Sidebar() {
                   style={{ cursor: 'pointer', borderRadius: 4 }}
                   bg={selectedGroupId === group.id ? 'var(--mantine-color-dark-5)' : undefined}
                   onClick={() => { setSelectedGroup(group.id); toggleGroupExpanded(group.id); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedGroup(group.id); toggleGroupExpanded(group.id); } }}
+                  tabIndex={0}
+                  role="button"
+                  aria-expanded={isExpanded}
+                  aria-label={`${group.name} group`}
                 >
                   <IconChevronRight
                     size={12}
@@ -206,8 +241,9 @@ export function Sidebar() {
                   setExportModalOpen(false);
                   notifications.show({ title: 'Exported', message: 'Data exported successfully', color: 'green' });
                 }
-              } catch (e: any) {
-                notifications.show({ title: 'Export Failed', message: e.toString(), color: 'red' });
+              } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                notifications.show({ title: 'Export Failed', message: msg, color: 'red' });
               }
             }}>Choose File & Export</Button>
           </Group>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Stack, NumberInput, Select, Switch, Text, Divider, Button, Badge, Group, Alert } from '@mantine/core';
 import { useStore } from '../store/useStore';
 import { open, save } from '@tauri-apps/plugin-dialog';
@@ -23,8 +23,9 @@ export function Settings() {
         const summary = await backup(path);
         notifications.show({ title: 'Backup Created', message: `${summary.db_size} bytes DB, ${summary.keys_count} keys`, color: 'green' });
       }
-    } catch (e: any) {
-      notifications.show({ title: 'Backup Failed', message: e.toString(), color: 'red' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notifications.show({ title: 'Backup Failed', message: msg, color: 'red' });
     }
   };
 
@@ -40,10 +41,29 @@ export function Settings() {
           autoClose: 10000,
         });
       }
-    } catch (e: any) {
-      notifications.show({ title: 'Restore Failed', message: e.toString(), color: 'red' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notifications.show({ title: 'Restore Failed', message: msg, color: 'red' });
     }
   };
+
+  const pendingUpdate = useRef<Partial<import('../types').Settings> | null>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const debouncedUpdate = useCallback((patch: Partial<import('../types').Settings>) => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    pendingUpdate.current = { ...(pendingUpdate.current ?? {}), ...patch };
+    debounceTimer.current = setTimeout(() => {
+      if (pendingUpdate.current) {
+        updateSettings(pendingUpdate.current);
+        pendingUpdate.current = null;
+      }
+    }, 400);
+  }, [updateSettings]);
+
+  useEffect(() => {
+    return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+  }, []);
 
   if (!settings) return <Text>Loading...</Text>;
 
@@ -66,7 +86,7 @@ export function Settings() {
       <NumberInput
         label="Terminal Font Size"
         value={settings.font_size}
-        onChange={(v) => updateSettings({ ...settings, font_size: Number(v) })}
+        onChange={(v) => debouncedUpdate({ font_size: Number(v) })}
         min={8}
         max={32}
       />
@@ -75,7 +95,7 @@ export function Settings() {
       <NumberInput
         label="Default SSH Port"
         value={settings.ssh_port}
-        onChange={(v) => updateSettings({ ...settings, ssh_port: Number(v) })}
+        onChange={(v) => debouncedUpdate({ ssh_port: Number(v) })}
         min={1}
         max={65535}
       />

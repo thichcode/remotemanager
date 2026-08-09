@@ -21,8 +21,9 @@ export function SshKeys() {
         setName('');
         setPassphrase('');
       }
-    } catch (e: any) {
-      notifications.show({ title: 'Error', message: e.toString(), color: 'red' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notifications.show({ title: 'Error', message: msg, color: 'red' });
     }
   };
 
@@ -33,16 +34,18 @@ export function SshKeys() {
       setImportOpen(false);
       setSelectedPath(null);
       notifications.show({ title: 'Imported', message: `Key "${name}" imported`, color: 'green' });
-    } catch (e: any) {
-      notifications.show({ title: 'Import Failed', message: e.toString(), color: 'red' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notifications.show({ title: 'Import Failed', message: msg, color: 'red' });
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await deleteSshKey(id);
-    } catch (e: any) {
-      notifications.show({ title: 'Error', message: e.toString(), color: 'red' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notifications.show({ title: 'Error', message: msg, color: 'red' });
     }
   };
 

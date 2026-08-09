@@ -31,18 +31,6 @@ fn validate_token(value: &str, field: &str, allow_backslash: bool) -> Result<(),
     Ok(())
 }
 
-/// Rejects empty/whitespace-only names and enforces a reasonable length.
-#[allow(dead_code)]
-pub fn validate_name(name: &str, field: &str) -> Result<(), String> {
-    if name.trim().is_empty() {
-        return Err(format!("{} is required", field));
-    }
-    if name.chars().count() > 300 {
-        return Err(format!("{} is too long (max 300)", field));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

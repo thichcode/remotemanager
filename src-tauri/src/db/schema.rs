@@ -74,6 +74,8 @@ pub fn create_tables(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_group ON servers(group_id)", [])?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_favorite ON servers(favorite)", [])?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_name ON servers(name)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_credential ON servers(credential_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_ssh_key ON servers(ssh_key_id)", [])?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_groups_parent ON groups(parent_id)", [])?;
 
     Ok(())
@@ -108,6 +110,7 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             );
 
             CREATE INDEX IF NOT EXISTS idx_history_connected ON session_history(connected_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_history_server ON session_history(server_id);
             ",
         )?;
 

@@ -37,9 +37,10 @@ export function UpdaterPanel() {
       } else {
         notifications.show({ title: 'Up to Date', message: 'You have the latest version.', color: 'green' });
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       setChecking(false);
-      notifications.show({ title: 'Update Check Failed', message: e.toString(), color: 'red' });
+      const msg = e instanceof Error ? e.message : String(e);
+      notifications.show({ title: 'Update Check Failed', message: msg, color: 'red' });
     }
   };
 

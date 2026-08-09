@@ -14,7 +14,10 @@ export type View = 'servers' | 'keys' | 'credentials' | 'settings';
 
 export function Layout() {
   const [view, setView] = useState<View>('servers');
-  const { sessionTabs, activeSessionTabId, focusSessionTab, closeSessionTab } = useStore();
+  const sessionTabs = useStore((s) => s.sessionTabs);
+  const activeSessionTabId = useStore((s) => s.activeSessionTabId);
+  const focusSessionTab = useStore((s) => s.focusSessionTab);
+  const closeSessionTab = useStore((s) => s.closeSessionTab);
   const showTabs = sessionTabs.length > 0;
 
   return (
