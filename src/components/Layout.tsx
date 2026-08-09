@@ -55,39 +55,46 @@ export function Layout() {
             height: 'calc(100dvh - var(--app-shell-header-offset, 0px) - var(--app-shell-footer-offset, 0px) - calc(var(--app-shell-padding, 0px) * 2))',
           }}
         >
-          <div style={{ display: showTerminal ? 'none' : 'block', height: '100%', overflowY: 'auto' }}>
-            <ServerList />
-          </div>
+          {!showTerminal && (
+            <div style={{ height: '100%', overflowY: 'auto' }}>
+              <ServerList />
+            </div>
+          )}
           {showTerminal && (
-            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <Tabs value={activeTerminalTabId ?? undefined} onChange={(v) => v && focusTerminalTab(v)} variant="outline">
-                <Tabs.List>
+            <div style={{ display: 'flex', gap: 12, height: '100%' }}>
+              <div style={{ width: 280, flexShrink: 0, overflowY: 'auto', borderRight: '1px solid var(--mantine-color-dark-4)', paddingRight: 12 }}>
+                <ServerList />
+              </div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                <Tabs value={activeTerminalTabId ?? undefined} onChange={(v) => v && focusTerminalTab(v)} variant="outline">
+                  <Tabs.List>
+                    {terminalTabs.map((tab) => (
+                      <Tabs.Tab
+                        key={tab.id}
+                        value={tab.id}
+                        rightSection={
+                          <ActionIcon
+                            size="xs"
+                            variant="subtle"
+                            aria-label={`Close terminal ${tab.title}`}
+                            onClick={(e) => { e.stopPropagation(); closeTerminalTab(tab.id); }}
+                          >
+                            <IconX size={12} />
+                          </ActionIcon>
+                        }
+                      >
+                        <Text size="xs" w={120} truncate>{tab.title}</Text>
+                      </Tabs.Tab>
+                    ))}
+                  </Tabs.List>
+                </Tabs>
+                <div style={{ flex: 1, minHeight: 0 }}>
                   {terminalTabs.map((tab) => (
-                    <Tabs.Tab
-                      key={tab.id}
-                      value={tab.id}
-                      rightSection={
-                        <ActionIcon
-                          size="xs"
-                          variant="subtle"
-                          aria-label={`Close terminal ${tab.title}`}
-                          onClick={(e) => { e.stopPropagation(); closeTerminalTab(tab.id); }}
-                        >
-                          <IconX size={12} />
-                        </ActionIcon>
-                      }
-                    >
-                      <Text size="xs" w={120} truncate>{tab.title}</Text>
-                    </Tabs.Tab>
+                    <div key={tab.id} style={{ display: tab.id === activeTerminalTabId ? 'block' : 'none', height: '100%' }}>
+                      <Terminal tab={tab} active={tab.id === activeTerminalTabId} />
+                    </div>
                   ))}
-                </Tabs.List>
-              </Tabs>
-              <div style={{ flex: 1, minHeight: 0 }}>
-                {terminalTabs.map((tab) => (
-                  <div key={tab.id} style={{ display: tab.id === activeTerminalTabId ? 'block' : 'none', height: '100%' }}>
-                    <Terminal tab={tab} active={tab.id === activeTerminalTabId} />
-                  </div>
-                ))}
+                </div>
               </div>
             </div>
           )}
