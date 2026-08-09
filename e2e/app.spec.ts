@@ -163,7 +163,7 @@ test('ssh terminal sends keystrokes and closes session', async ({ page }) => {
   });
   expect(hasLs).toBe(true);
 
-  await page.getByRole('button', { name: /Close terminal/ }).click();
+  await page.getByRole('button', { name: /Close.*session/ }).click();
   await page.waitForTimeout(300);
   const sessionsAfterClose = await page.evaluate(() => {
     const db = localStorage.getItem('rm_mock_db_v1');

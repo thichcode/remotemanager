@@ -1,5 +1,5 @@
 import { AppShell, Group, Text, SegmentedControl, Tabs, ActionIcon } from '@mantine/core';
-import { IconX } from '@tabler/icons-react';
+import { IconX, IconServer } from '@tabler/icons-react';
 import { Sidebar } from './Sidebar';
 import { ServerList } from './ServerList';
 import { SearchBar } from './SearchBar';
@@ -7,6 +7,7 @@ import { SshKeys } from './SshKeys';
 import { Settings } from './Settings';
 import { Credentials } from './Credentials';
 import { Terminal } from './Terminal';
+import { RdpSession } from './RdpSession';
 import { useStore } from '../store/useStore';
 import { useState } from 'react';
 
@@ -15,7 +16,7 @@ export type View = 'servers' | 'keys' | 'credentials' | 'settings';
 export function Layout() {
   const [view, setView] = useState<View>('servers');
   const { sessionTabs, activeSessionTabId, focusSessionTab, closeSessionTab } = useStore();
-  const showTerminal = sessionTabs.length > 0;
+  const showTabs = sessionTabs.length > 0;
 
   return (
     <AppShell
@@ -48,53 +49,60 @@ export function Layout() {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        {/* Servers view: kept mounted always so terminal sessions survive view switches */}
+        {/* Servers view: kept mounted always so sessions survive view switches */}
         <div
           style={{
             display: view === 'servers' ? 'block' : 'none',
             height: 'calc(100dvh - var(--app-shell-header-offset, 0px) - var(--app-shell-footer-offset, 0px) - calc(var(--app-shell-padding, 0px) * 2))',
           }}
         >
-          {!showTerminal && (
-            <div style={{ height: '100%', overflowY: 'auto' }}>
-              <ServerList />
-            </div>
-          )}
-          {showTerminal && (
-            <div style={{ display: 'flex', gap: 12, height: '100%' }}>
-              <div style={{ width: 280, flexShrink: 0, overflowY: 'auto', borderRight: '1px solid var(--mantine-color-dark-4)', paddingRight: 12 }}>
+          {!showTabs && (
+            <div style={{ height: '100%', display: 'flex', gap: 16 }}>
+              <div style={{ width: 320, flexShrink: 0, overflowY: 'auto', borderRight: '1px solid var(--mantine-color-dark-4)', paddingRight: 16 }}>
                 <ServerList />
               </div>
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                <Tabs value={activeSessionTabId ?? undefined} onChange={(v) => v && focusSessionTab(v)} variant="outline">
-                  <Tabs.List>
-                    {sessionTabs.map((tab) => (
-                      <Tabs.Tab
-                        key={tab.id}
-                        value={tab.id}
-                        rightSection={
-                          <ActionIcon
-                            size="xs"
-                            variant="subtle"
-                            aria-label={`Close terminal ${tab.title}`}
-                            onClick={(e) => { e.stopPropagation(); closeSessionTab(tab.id); }}
-                          >
-                            <IconX size={12} />
-                          </ActionIcon>
-                        }
-                      >
-                        <Text size="xs" w={120} truncate>{tab.title}</Text>
-                      </Tabs.Tab>
-                    ))}
-                  </Tabs.List>
-                </Tabs>
-                <div style={{ flex: 1, minHeight: 0 }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Group c="dimmed" gap="md">
+                  <IconServer size={32} style={{ opacity: 0.3 }} />
+                  <Text>Select a server to connect</Text>
+                </Group>
+              </div>
+            </div>
+          )}
+          {showTabs && (
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <Tabs value={activeSessionTabId ?? undefined} onChange={(v) => v && focusSessionTab(v)} variant="outline">
+                <Tabs.List>
                   {sessionTabs.map((tab) => (
-                    <div key={tab.id} style={{ display: tab.id === activeSessionTabId ? 'block' : 'none', height: '100%' }}>
-                      <Terminal tab={tab} active={tab.id === activeSessionTabId} />
-                    </div>
+                    <Tabs.Tab
+                      key={tab.id}
+                      value={tab.id}
+                      rightSection={
+                        <ActionIcon
+                          size="xs"
+                          variant="subtle"
+                          aria-label={`Close ${tab.protocol} session ${tab.title}`}
+                          onClick={(e) => { e.stopPropagation(); closeSessionTab(tab.id); }}
+                        >
+                          <IconX size={12} />
+                        </ActionIcon>
+                      }
+                    >
+                      <Text size="xs" w={120} truncate>{tab.title}</Text>
+                    </Tabs.Tab>
                   ))}
-                </div>
+                </Tabs.List>
+              </Tabs>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                {sessionTabs.map((tab) => (
+                  <div key={tab.id} style={{ display: tab.id === activeSessionTabId ? 'block' : 'none', height: '100%' }}>
+                    {tab.protocol === 'ssh' ? (
+                      <Terminal tab={tab} active={tab.id === activeSessionTabId} />
+                    ) : (
+                      <RdpSession tab={tab} />
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
