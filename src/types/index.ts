@@ -73,10 +73,12 @@ export interface BackupSummary {
   keys_count: number;
 }
 
-export interface TerminalTab {
+export interface SessionTab {
   id: string;
   title: string;
+  protocol: 'ssh' | 'rdp';
   serverId: string | null;
   sessionId: string | null;
+  processId: number | null;
   status: 'connecting' | 'connected' | 'closed';
 }

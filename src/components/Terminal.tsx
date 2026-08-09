@@ -4,10 +4,10 @@ import { FitAddon } from '@xterm/addon-fit';
 import { listen } from '@tauri-apps/api/event';
 import { sshWrite, sshResize } from '../services/tauri';
 import { Stack, Text } from '@mantine/core';
-import type { TerminalTab } from '../types';
+import type { SessionTab } from '../types';
 
 interface Props {
-  tab: TerminalTab;
+  tab: SessionTab;
   active: boolean;
 }
 

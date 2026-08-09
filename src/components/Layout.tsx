@@ -14,8 +14,8 @@ export type View = 'servers' | 'keys' | 'credentials' | 'settings';
 
 export function Layout() {
   const [view, setView] = useState<View>('servers');
-  const { terminalTabs, activeTerminalTabId, focusTerminalTab, closeTerminalTab } = useStore();
-  const showTerminal = terminalTabs.length > 0;
+  const { sessionTabs, activeSessionTabId, focusSessionTab, closeSessionTab } = useStore();
+  const showTerminal = sessionTabs.length > 0;
 
   return (
     <AppShell
@@ -66,9 +66,9 @@ export function Layout() {
                 <ServerList />
               </div>
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                <Tabs value={activeTerminalTabId ?? undefined} onChange={(v) => v && focusTerminalTab(v)} variant="outline">
+                <Tabs value={activeSessionTabId ?? undefined} onChange={(v) => v && focusSessionTab(v)} variant="outline">
                   <Tabs.List>
-                    {terminalTabs.map((tab) => (
+                    {sessionTabs.map((tab) => (
                       <Tabs.Tab
                         key={tab.id}
                         value={tab.id}
@@ -77,7 +77,7 @@ export function Layout() {
                             size="xs"
                             variant="subtle"
                             aria-label={`Close terminal ${tab.title}`}
-                            onClick={(e) => { e.stopPropagation(); closeTerminalTab(tab.id); }}
+                            onClick={(e) => { e.stopPropagation(); closeSessionTab(tab.id); }}
                           >
                             <IconX size={12} />
                           </ActionIcon>
@@ -89,9 +89,9 @@ export function Layout() {
                   </Tabs.List>
                 </Tabs>
                 <div style={{ flex: 1, minHeight: 0 }}>
-                  {terminalTabs.map((tab) => (
-                    <div key={tab.id} style={{ display: tab.id === activeTerminalTabId ? 'block' : 'none', height: '100%' }}>
-                      <Terminal tab={tab} active={tab.id === activeTerminalTabId} />
+                  {sessionTabs.map((tab) => (
+                    <div key={tab.id} style={{ display: tab.id === activeSessionTabId ? 'block' : 'none', height: '100%' }}>
+                      <Terminal tab={tab} active={tab.id === activeSessionTabId} />
                     </div>
                   ))}
                 </div>

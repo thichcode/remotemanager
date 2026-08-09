@@ -188,3 +188,29 @@ export const sshClose = (sessionId: string): Promise<void> =>
 
 export const sshCloseAll = (): Promise<void> =>
   invoke('cmd_ssh_close_all');
+
+// RDP Sessions
+export const openRdpSession = (args: {
+  host: string;
+  username: string;
+  fullscreen: boolean;
+  adminMode: boolean;
+  serverId?: string | null;
+  serverName?: string | null;
+  credentialId?: string | null;
+}): Promise<number> =>
+  invoke('cmd_launch_rdp_session', {
+    host: args.host,
+    username: args.username,
+    fullscreen: args.fullscreen,
+    admin_mode: args.adminMode,
+    server_id: args.serverId ?? null,
+    server_name: args.serverName ?? null,
+    credential_id: args.credentialId ?? null,
+  });
+
+export const rdpProcessAlive = (pid: number): Promise<boolean> =>
+  invoke('cmd_rdp_process_alive', { pid });
+
+export const rdpKillProcess = (pid: number): Promise<void> =>
+  invoke('cmd_rdp_kill_process', { pid });

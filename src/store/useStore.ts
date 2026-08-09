@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Server, Group, Credential, Settings, HistoryEntry, SshKey, TerminalTab } from '../types';
+import type { Server, Group, Credential, Settings, HistoryEntry, SshKey, SessionTab } from '../types';
 import * as api from '../services/tauri';
 
 interface AppState {
@@ -13,8 +13,9 @@ interface AppState {
   selectedGroupId: string | null;
   selectedServerId: string | null;
   isLoading: boolean;
-  terminalTabs: TerminalTab[];
-  activeTerminalTabId: string | null;
+  sessionTabs: SessionTab[];
+  activeSessionTabId: string | null;
+  expandedGroups: Record<string, boolean>;
 
   loadServers: () => Promise<void>;
   loadGroups: () => Promise<void>;
@@ -41,9 +42,12 @@ interface AppState {
   setSearchQuery: (query: string) => void;
   setSelectedGroup: (id: string | null) => void;
   setSelectedServer: (id: string | null) => void;
-  openTerminalTab: (server: Server) => Promise<void>;
-  closeTerminalTab: (id: string) => Promise<void>;
-  focusTerminalTab: (id: string) => void;
+  toggleGroupExpanded: (groupId: string) => void;
+  openSession: (server: Server) => Promise<void>;
+  openRdpTab: (server: Server) => Promise<void>;
+  closeSessionTab: (id: string) => Promise<void>;
+  focusSessionTab: (id: string) => void;
+  _startRdpPoll: (tabId: string, pid: number) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -57,8 +61,9 @@ export const useStore = create<AppState>((set, get) => ({
   selectedGroupId: null,
   selectedServerId: null,
   isLoading: false,
-  terminalTabs: [],
-  activeTerminalTabId: null,
+  sessionTabs: [],
+  activeSessionTabId: null,
+  expandedGroups: {},
 
   loadServers: async () => {
     const groupId = get().selectedGroupId;
@@ -204,14 +209,18 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setSelectedServer: (id) => set({ selectedServerId: id }),
 
-  openTerminalTab: async (server) => {
+  toggleGroupExpanded: (groupId) => set((s) => ({
+    expandedGroups: { ...s.expandedGroups, [groupId]: !s.expandedGroups[groupId] },
+  })),
+
+  openSession: async (server) => {
     const tabId = crypto.randomUUID();
     set({
-      terminalTabs: [
-        ...get().terminalTabs,
-        { id: tabId, title: `${server.username || 'user'}@${server.host}`, serverId: server.id, sessionId: null, status: 'connecting' },
+      sessionTabs: [
+        ...get().sessionTabs,
+        { id: tabId, title: `${server.username || 'user'}@${server.host}`, protocol: 'ssh', serverId: server.id, sessionId: null, processId: null, status: 'connecting' },
       ],
-      activeTerminalTabId: tabId,
+      activeSessionTabId: tabId,
     });
     try {
       const sessionId = await api.openSshSession({
@@ -223,19 +232,18 @@ export const useStore = create<AppState>((set, get) => ({
         sshKeyId: server.ssh_key_id,
         credentialId: server.credential_id,
       });
-      if (!get().terminalTabs.some(t => t.id === tabId)) {
-        // Tab was closed while the session was connecting — release it.
-        try { await api.sshClose(sessionId); } catch { /* already gone */ }
+      if (!get().sessionTabs.some(t => t.id === tabId)) {
+        try { await api.sshClose(sessionId); } catch {}
         return;
       }
       set({
-        terminalTabs: get().terminalTabs.map(t =>
+        sessionTabs: get().sessionTabs.map(t =>
           t.id === tabId ? { ...t, sessionId, status: 'connected' } : t
         ),
       });
     } catch (e) {
       set({
-        terminalTabs: get().terminalTabs.map(t =>
+        sessionTabs: get().sessionTabs.map(t =>
           t.id === tabId ? { ...t, status: 'closed' } : t
         ),
       });
@@ -243,20 +251,83 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  closeTerminalTab: async (id) => {
-    const tab = get().terminalTabs.find(t => t.id === id);
-    const remaining = get().terminalTabs.filter(t => t.id !== id);
+  openRdpTab: async (server) => {
+    const tabId = crypto.randomUUID();
     set({
-      terminalTabs: remaining,
-      activeTerminalTabId:
-        get().activeTerminalTabId === id
-          ? remaining.length > 0 ? remaining[0].id : null
-          : get().activeTerminalTabId,
+      sessionTabs: [
+        ...get().sessionTabs,
+        { id: tabId, title: server.name, protocol: 'rdp', serverId: server.id, sessionId: null, processId: null, status: 'connecting' },
+      ],
+      activeSessionTabId: tabId,
     });
-    if (tab?.sessionId) {
-      try { await api.sshClose(tab.sessionId); } catch { /* already gone */ }
+    try {
+      const pid = await api.openRdpSession({
+        host: server.host,
+        username: server.username,
+        fullscreen: get().settings?.rdp_fullscreen ?? false,
+        adminMode: get().settings?.rdp_admin_mode ?? false,
+        serverId: server.id,
+        serverName: server.name,
+        credentialId: server.credential_id,
+      });
+      if (!get().sessionTabs.some(t => t.id === tabId)) {
+        try { await api.rdpKillProcess(pid); } catch {}
+        return;
+      }
+      set({
+        sessionTabs: get().sessionTabs.map(t =>
+          t.id === tabId ? { ...t, processId: pid, status: 'connected' } : t
+        ),
+      });
+      get()._startRdpPoll(tabId, pid);
+    } catch (e) {
+      set({
+        sessionTabs: get().sessionTabs.map(t =>
+          t.id === tabId ? { ...t, status: 'closed' } : t
+        ),
+      });
+      throw e;
     }
   },
 
-  focusTerminalTab: (id) => set({ activeTerminalTabId: id }),
+  _startRdpPoll: (tabId: string, pid: number) => {
+    const poll = async () => {
+      const { sessionTabs } = get();
+      const tab = sessionTabs.find(t => t.id === tabId);
+      if (!tab || tab.status === 'closed') return;
+      try {
+        const alive = await api.rdpProcessAlive(pid);
+        if (!alive) {
+          set({
+            sessionTabs: get().sessionTabs.map(t =>
+              t.id === tabId ? { ...t, status: 'closed' } : t
+            ),
+          });
+          return;
+        }
+      } catch {}
+      setTimeout(poll, 2000);
+    };
+    setTimeout(poll, 2000);
+  },
+
+  closeSessionTab: async (id) => {
+    const tab = get().sessionTabs.find(t => t.id === id);
+    const remaining = get().sessionTabs.filter(t => t.id !== id);
+    set({
+      sessionTabs: remaining,
+      activeSessionTabId:
+        get().activeSessionTabId === id
+          ? remaining.length > 0 ? remaining[0].id : null
+          : get().activeSessionTabId,
+    });
+    if (tab?.protocol === 'ssh' && tab.sessionId) {
+      try { await api.sshClose(tab.sessionId); } catch {}
+    }
+    if (tab?.protocol === 'rdp' && tab.processId) {
+      try { await api.rdpKillProcess(tab.processId); } catch {}
+    }
+  },
+
+  focusSessionTab: (id) => set({ activeSessionTabId: id }),
 }));
