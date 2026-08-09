@@ -184,6 +184,115 @@ pub fn cmd_launch_rdp(
     Ok(())
 }
 
+/// Launch RDP and return the mstsc.exe PID for lifecycle management.
+#[tauri::command(rename_all = "snake_case")]
+pub fn cmd_launch_rdp_session(
+    state: tauri::State<crate::db::AppState>,
+    host: String,
+    username: String,
+    fullscreen: bool,
+    admin_mode: bool,
+    server_id: Option<String>,
+    server_name: Option<String>,
+    credential_id: Option<String>,
+) -> Result<i32, String> {
+    validate_host(&host)?;
+    let username = resolve_username(&state, username, credential_id.as_deref())?;
+    validate_username(&username)?;
+
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        let name = server_name.unwrap_or_else(|| host.clone());
+        let _ = crate::history::record(&conn, server_id.as_deref(), &name, &host, Some(3389), "rdp", &username, None);
+        if let Some(sid) = server_id.as_deref() {
+            let _ = crate::db::operations::touch_last_connected(&conn, sid);
+        }
+    }
+
+    let mut rdp_content = format!(
+        "full address:s:{}\r\nusername:s:{}\r\nscreen mode id:i:{}\r\n",
+        host, username, if fullscreen { 2 } else { 1 }
+    );
+    if admin_mode {
+        rdp_content.push_str("administrative session:i:1\r\n");
+    }
+    if let Some(encrypted_pw) = resolve_credential_password(&state, credential_id.as_deref())? {
+        use base64::Engine;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(encrypted_pw.as_bytes());
+        rdp_content.push_str(&format!("password 51:b:{}\r\n", encoded));
+    }
+
+    let safe_host: String = host
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let temp_path = std::env::temp_dir().join(format!("rm_{}.rdp", safe_host));
+    std::fs::write(&temp_path, &rdp_content)
+        .map_err(|e| format!("Failed to create RDP file: {}", e))?;
+
+    #[cfg(windows)]
+    let child = {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        Command::new("mstsc.exe")
+            .arg(temp_path.to_str().unwrap())
+            .creation_flags(CREATE_NEW_PROCESS_GROUP)
+            .spawn()
+    };
+    #[cfg(not(windows))]
+    let child = Command::new("mstsc.exe")
+        .arg(temp_path.to_str().unwrap())
+        .spawn();
+
+    let child = child.map_err(|e| format!("Failed to launch RDP: {}", e))?;
+    let pid = child.id() as i32;
+
+    // Cleanup temp file after delay
+    let cleanup_path = temp_path;
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        let _ = std::fs::remove_file(&cleanup_path);
+    });
+
+    Ok(pid)
+}
+
+/// Check if a process (mstsc.exe) is still running.
+#[tauri::command(rename_all = "snake_case")]
+pub fn cmd_rdp_process_alive(pid: i32) -> Result<bool, String> {
+    #[cfg(windows)]
+    {
+        let output = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {}", pid), "/FO", "CSV", "/NH"])
+            .output()
+            .map_err(|e| e.to_string())?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.contains(&pid.to_string()))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = pid;
+        Ok(false)
+    }
+}
+
+/// Kill a process by PID (used to close mstsc.exe when tab is closed).
+#[tauri::command(rename_all = "snake_case")]
+pub fn cmd_rdp_kill_process(pid: i32) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/F"])
+            .output()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = pid;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn cmd_ping(host: String) -> Result<String, String> {
     validate_host(&host)?;
