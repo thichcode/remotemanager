@@ -145,10 +145,10 @@ fn show_webview2_dialog() {
     }
 
     let text = "Remote Manager requires Microsoft Edge WebView2 Runtime.\n\n\
-The installer will now open. Please complete the installation, then restart Remote Manager.\n\n\
-(This is a one-time setup. No admin rights required.)\n\n\
-If the installer does not open, download from:\n\
-https://go.microsoft.com/fwlink/p/?LinkId=2124703";
+An installer will now open. Please complete it, then restart Remote Manager.\n\n\
+If the installer cannot download (no internet), get the offline installer from:\n\
+https://go.microsoft.com/fwlink/p/?LinkId=2124703\n\n\
+(No admin rights required)";
     let caption = "Remote Manager - WebView2 Required";
 
     let text_utf16: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
