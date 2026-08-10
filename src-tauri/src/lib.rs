@@ -7,6 +7,7 @@ pub mod rdp;
 mod security;
 mod sessions;
 mod sshkeys;
+mod webview2;
 
 use db::{AppState, init_connection};
 use tauri::Manager;
@@ -14,6 +15,12 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
+
+    // Check WebView2 before anything else — if missing, show dialog and exit
+    if !webview2::check_and_install_webview2() {
+        eprintln!("WebView2 Runtime not available, exiting.");
+        return;
+    }
 
     let conn = match init_connection() {
         Ok(c) => c,
