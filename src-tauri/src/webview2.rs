@@ -14,7 +14,10 @@ pub fn check_and_install_webview2() -> bool {
     // Try to run the bundled bootstrapper silently
     if try_install_webview2() {
         // Re-check after install
-        return is_webview2_installed();
+        if is_webview2_installed() {
+            return true;
+        }
+        eprintln!("[webview2] Bootstrapper ran but WebView2 still not detected");
     }
 
     // Show dialog explaining what to do
@@ -46,12 +49,31 @@ fn is_webview2_installed() -> bool {
         }
     }
 
-    // Also check via file system — WebView2 runtime DLL
+    // Also check HKCU (per-user install — the bootstrapper installs here)
+    let hku = RegKey::predef(HKEY_CURRENT_USER);
+    let cu_paths = [
+        r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BEB-23456918E9FD}",
+    ];
+    for path in &cu_paths {
+        if let Ok(key) = hku.open_subkey_with_flags(path, KEY_READ) {
+            if let Ok(value) = key.get_value::<String, _>("pv") {
+                if !value.is_empty() {
+                    eprintln!("[webview2] Found version (HKCU): {}", value);
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Also check via file system — WebView2 runtime exe
     let edge_dirs = [
         std::env::var("PROGRAMFILES(X86)")
             .map(|p| format!(r"{}\Microsoft\EdgeWebView\Application", p))
             .unwrap_or_default(),
         std::env::var("PROGRAMFILES")
+            .map(|p| format!(r"{}\Microsoft\EdgeWebView\Application", p))
+            .unwrap_or_default(),
+        std::env::var("LOCALAPPDATA")
             .map(|p| format!(r"{}\Microsoft\EdgeWebView\Application", p))
             .unwrap_or_default(),
     ];
@@ -67,6 +89,7 @@ fn is_webview2_installed() -> bool {
         }
     }
 
+    eprintln!("[webview2] Not found anywhere");
     false
 }
 
@@ -92,13 +115,14 @@ fn try_install_webview2() -> bool {
 
     eprintln!("[webview2] Running bootstrapper: {}", bootstrapper.display());
 
+    // /silent /install = per-user install, no admin needed
     let result = Command::new(&bootstrapper)
         .args(["/silent", "/install"])
         .spawn();
 
     match result {
         Ok(mut child) => {
-            // Wait up to 60 seconds for install
+            // Wait up to 120 seconds for install (downloads ~150MB)
             let _ = child.wait();
             eprintln!("[webview2] Bootstrapper completed");
             true
@@ -117,15 +141,11 @@ fn show_webview2_dialog() {
         fn MessageBoxW(hWnd: *mut core::ffi::c_void, lpText: *const u16, lpCaption: *const u16, uType: u32) -> i32;
     }
 
-    let text = "\
-Remote Manager requires Microsoft Edge WebView2 Runtime.
-
-Please download and install it from:
-https://go.microsoft.com/fwlink/p/?LinkId=2124703
-
-After installation, restart Remote Manager.
-
-(This is a one-time setup, no admin rights required for Evergreen Bootstrapper)";
+    let text = "Remote Manager requires Microsoft Edge WebView2 Runtime.\n\n\
+The installer will now open. Please complete the installation, then restart Remote Manager.\n\n\
+(This is a one-time setup. No admin rights required.)\n\n\
+If the installer does not open, download from:\n\
+https://go.microsoft.com/fwlink/p/?LinkId=2124703";
     let caption = "Remote Manager - WebView2 Required";
 
     let text_utf16: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
@@ -134,6 +154,11 @@ After installation, restart Remote Manager.
     unsafe {
         MessageBoxW(null_mut(), text_utf16.as_ptr(), caption_utf16.as_ptr(), 0x30);
     }
+
+    // Also try to open the download page in the default browser
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", "https://go.microsoft.com/fwlink/p/?LinkId=2124703"])
+        .spawn();
 }
 
 #[cfg(not(windows))]
