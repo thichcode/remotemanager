@@ -13,14 +13,17 @@ pub fn check_and_install_webview2() -> bool {
 
     // Try to run the bundled bootstrapper silently
     if try_install_webview2() {
-        // Re-check after install
+        // Re-check after install — WebView2 might need a fresh process
         if is_webview2_installed() {
             return true;
         }
-        eprintln!("[webview2] Bootstrapper ran but WebView2 still not detected");
+        // Bootstrapper ran but WebView2 not detected yet — it may need a restart
+        eprintln!("[webview2] Bootstrapper ran but WebView2 still not detected, may need restart");
+        show_webview2_restart_dialog();
+        return false;
     }
 
-    // Show dialog explaining what to do
+    // Bootstrapper not found or failed — show download dialog
     show_webview2_dialog();
     false
 }
@@ -159,6 +162,26 @@ https://go.microsoft.com/fwlink/p/?LinkId=2124703";
     let _ = std::process::Command::new("cmd")
         .args(["/C", "start", "https://go.microsoft.com/fwlink/p/?LinkId=2124703"])
         .spawn();
+}
+
+#[cfg(windows)]
+fn show_webview2_restart_dialog() {
+    use std::ptr::null_mut;
+    extern "system" {
+        fn MessageBoxW(hWnd: *mut core::ffi::c_void, lpText: *const u16, lpCaption: *const u16, uType: u32) -> i32;
+    }
+
+    let text = "WebView2 Runtime has been installed.\n\n\
+Please restart Remote Manager to continue.\n\n\
+(This is a one-time setup)";
+    let caption = "Remote Manager - Restart Required";
+
+    let text_utf16: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+    let caption_utf16: Vec<u16> = caption.encode_utf16().chain(std::iter::once(0)).collect();
+
+    unsafe {
+        MessageBoxW(null_mut(), text_utf16.as_ptr(), caption_utf16.as_ptr(), 0x40);
+    }
 }
 
 #[cfg(not(windows))]
