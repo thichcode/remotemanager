@@ -14,6 +14,9 @@ env:
 jobs:
   release:
     runs-on: windows-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      changed: ${{ steps.version.outputs.changed }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -138,49 +141,25 @@ jobs:
   sciter-release:
     runs-on: windows-latest
     needs: release
+    if: needs.release.outputs.changed == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check version changed
-        id: version
-        shell: bash
-        run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "tag=v0.1.0" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          TAG_VERSION="${LAST_TAG#v}"
-          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "tag=v${PKG_VERSION}" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
-          fi
 
       - name: Setup Rust
-        if: steps.version.outputs.changed == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.RUST_TARGET }}
 
       - name: Rust cache
-        if: steps.version.outputs.changed == 'true'
         uses: swatinem/rust-cache@v2
         with:
           workspaces: sciter-app
 
       - name: Build Sciter app
-        if: steps.version.outputs.changed == 'true'
         run: cargo build --release --manifest-path sciter-app/Cargo.toml
 
       - name: Download sciter.dll
-        if: steps.version.outputs.changed == 'true'
         shell: bash
         run: |
           curl -L -o sciter-sdk.zip "https://gitlab.com/sciter-engine/sciter-js-sdk/-/archive/main/sciter-js-sdk-main.zip"
@@ -188,7 +167,6 @@ jobs:
           find sdk -name "sciter.dll" -path "*windows/x64*" -exec cp {} sciter-app/target/release/ \;
 
       - name: Package portable zip
-        if: steps.version.outputs.changed == 'true'
         shell: bash
         run: |
           mkdir -p portable-sciter
@@ -198,8 +176,7 @@ jobs:
           powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../sciter-portable.zip -Force"
 
       - name: Upload to Release
-        if: steps.version.outputs.changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ steps.version.outputs.tag }}" sciter-portable.zip --clobber
+          gh release upload "${{ needs.release.outputs.tag }}" sciter-portable.zip --clobber
