@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Server, Group, Credential, Settings, HistoryEntry, SshKey, BackupSummary } from '../types';
+import type { Server, Group, Credential, Settings, HistoryEntry, SshKey, BackupSummary, UploadProgress } from '../types';
 
 // Servers
 export const createServer = (server: Server): Promise<string> =>
@@ -215,3 +215,13 @@ export const openRdpSession = (args: {
 
 export const closeRdpSession = (wsPort: number): Promise<void> =>
   invoke('cmd_close_rdp_session', { ws_port: wsPort });
+
+// SFTP Upload
+export const uploadFiles = (serverId: string, localPaths: string[]): Promise<string> =>
+  invoke('cmd_upload_files', { serverId, localPaths });
+
+export const getUploadProgress = (jobId: string): Promise<UploadProgress | null> =>
+  invoke('cmd_get_upload_progress', { jobId });
+
+export const cancelUpload = (jobId: string): Promise<void> =>
+  invoke('cmd_cancel_upload', { jobId });

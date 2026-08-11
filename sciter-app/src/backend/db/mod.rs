@@ -8,13 +8,14 @@ use std::path::PathBuf;
 
 pub struct AppState {
     pub db: Mutex<Connection>,
-    pub sessions: Arc<crate::sessions::SessionManager>,
+    pub sessions: Arc<crate::backend::sessions::SessionManager>,
     pub rdp_sessions: Mutex<HashMap<u16, tokio::sync::oneshot::Sender<()>>>,
-    pub upload_jobs: crate::sftp::UploadManager,
+    pub terminal_sessions: Mutex<HashMap<u16, tokio::sync::oneshot::Sender<()>>>,
+    pub upload_jobs: crate::backend::sftp::UploadManager,
 }
 
 pub fn get_db_path() -> PathBuf {
-    crate::paths::db_path()
+    crate::backend::paths::db_path()
 }
 
 pub fn init_connection() -> Result<Connection, String> {
