@@ -1,14 +1,15 @@
 import { Box, Text, Group, ActionIcon, Stack, Divider, TextInput, Button, Modal, SegmentedControl } from '@mantine/core';
-import { IconPlus, IconServer, IconStar, IconClock, IconTrash, IconFolder, IconChevronRight, IconDownload } from '@tabler/icons-react';
+import { IconPlus, IconServer, IconStar, IconFolder, IconChevronRight, IconDownload } from '@tabler/icons-react';
 import { useStore } from '../store/useStore';
 import { useState } from 'react';
-import { launchSsh, launchRdp, exportCsv, exportJson } from '../services/tauri';
+import { exportCsv, exportJson } from '../services/tauri';
 import { notifications } from '@mantine/notifications';
 import { modals } from '@mantine/modals';
 import { save } from '@tauri-apps/plugin-dialog';
 import { GroupServerTree } from './GroupServerTree';
 import { ServerForm } from './ServerForm';
-import type { HistoryEntry, Server } from '../types';
+import { DropZone } from './DropZone';
+import type { Server } from '../types';
 
 const FAVORITES_ID = '__favorites__';
 const UNGROUPED_ID = '__ungrouped__';
@@ -16,17 +17,20 @@ const UNGROUPED_ID = '__ungrouped__';
 export function Sidebar() {
   const groups = useStore((s) => s.groups);
   const servers = useStore((s) => s.servers);
-  const settings = useStore((s) => s.settings);
   const selectedGroupId = useStore((s) => s.selectedGroupId);
   const setSelectedGroup = useStore((s) => s.setSelectedGroup);
   const createGroup = useStore((s) => s.createGroup);
-  const history = useStore((s) => s.history);
   const clearHistory = useStore((s) => s.clearHistory);
   const expandedGroups = useStore((s) => s.expandedGroups);
   const toggleGroupExpanded = useStore((s) => s.toggleGroupExpanded);
+  const activeSessionTabId = useStore((s) => s.activeSessionTabId);
+  const sessionTabs = useStore((s) => s.sessionTabs);
   const [newGroupName, setNewGroupName] = useState('');
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
+
+  const activeTab = sessionTabs.find((t) => t.id === activeSessionTabId && t.protocol === 'ssh');
+  const activeServer = activeTab?.serverId ? servers.find((s) => s.id === activeTab!.serverId) ?? null : null;
 
   const favorites = servers.filter(s => s.favorite);
   const rootGroups = groups.filter(g => !g.parent_id);
@@ -44,19 +48,6 @@ export function Sidebar() {
     if (newGroupName.trim()) {
       await createGroup(newGroupName.trim());
       setNewGroupName('');
-    }
-  };
-
-  const handleReconnect = async (entry: HistoryEntry) => {
-    try {
-      if (entry.protocol === 'ssh') {
-        await launchSsh(entry.host, entry.port ?? 22, entry.username, entry.server_id ?? undefined, entry.server_name, entry.ssh_key_id ?? undefined);
-      } else {
-        await launchRdp(entry.host, entry.username, settings?.rdp_fullscreen ?? false, settings?.rdp_admin_mode ?? false, entry.server_id ?? undefined, entry.server_name);
-      }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      notifications.show({ title: 'Error', message: msg, color: 'red' });
     }
   };
 
@@ -98,43 +89,19 @@ export function Sidebar() {
 
       <Divider my="md" />
 
-      {history.length > 0 && (
-        <Stack gap={4} mb="md">
-          <Group justify="space-between" align="center">
-            <Text size="xs" fw={600} c="dimmed" tt="uppercase">Recent</Text>
-            <ActionIcon size="sm" variant="subtle" onClick={() => {
-              modals.openConfirmModal({
-                title: 'Clear History',
-                children: <Text size="sm">This will remove all recent connection history. This cannot be undone.</Text>,
-                labels: { confirm: 'Clear', cancel: 'Cancel' },
-                confirmProps: { color: 'red' },
-                onConfirm: () => clearHistory(),
-              });
-            }}>
-              <IconTrash size={14} />
-            </ActionIcon>
-          </Group>
-          {history.slice(0, 5).map(entry => (
-            <Group
-              key={entry.id}
-              gap={8}
-              p="xs"
-              style={{ cursor: 'pointer', borderRadius: 4 }}
-              onClick={() => handleReconnect(entry)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleReconnect(entry); } }}
-              tabIndex={0}
-              role="button"
-              aria-label={`Reconnect to ${entry.server_name}`}
-            >
-              <IconClock size={14} />
-              <Box style={{ flex: 1 }}>
-                <Text size="sm" truncate>{entry.server_name}</Text>
-                <Text size="xs" c="dimmed">{entry.host}:{entry.port ?? (entry.protocol === 'rdp' ? 3389 : 22)}</Text>
-              </Box>
-            </Group>
-          ))}
-        </Stack>
-      )}
+      <DropZone
+        activeServerId={activeServer?.id ?? null}
+        activeServerHost={activeServer?.host ?? null}
+        onClearHistory={() => {
+          modals.openConfirmModal({
+            title: 'Clear History',
+            children: <Text size="sm">This will remove all recent connection history. This cannot be undone.</Text>,
+            labels: { confirm: 'Clear', cancel: 'Cancel' },
+            confirmProps: { color: 'red' },
+            onConfirm: () => clearHistory(),
+          });
+        }}
+      />
 
       <Divider my="md" />
 

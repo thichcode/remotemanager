@@ -82,3 +82,13 @@ export interface SessionTab {
   wsPort: number | null;
   status: 'connecting' | 'connected' | 'closed';
 }
+
+export interface UploadProgress {
+  state: 'uploading' | 'done' | 'error' | 'cancelled';
+  current_file: string;
+  file_index: number;
+  total_files: number;
+  bytes_sent: number;
+  total_bytes: number;
+  error: string | null;
+}
