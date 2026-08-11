@@ -1,0 +1,833 @@
+﻿<html>
+<head>
+  <title>Remote Manager</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "Segoe UI", sans-serif; background: #1a1b26; color: #c0caf5; height: *; display: flex; }
+
+    .app { display: flex; height: 100%; width: 100%; }
+
+    /* Sidebar */
+    .sidebar { width: 260px; background: #16161e; border-right: 1px solid #292e42; display: flex; flex-direction: column; }
+    .sidebar-header { padding: 12px 16px; font-weight: bold; font-size: 14px; border-bottom: 1px solid #292e42; display: flex; justify-content: space-between; align-items: center; }
+    .sidebar-content { flex: 1; overflow-y: auto; padding: 8px; }
+    .group-label { padding: 6px 12px; font-size: 11px; color: #565f89; font-weight: bold; }
+    .server-item { padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-bottom: 2px; }
+    .server-item:hover { background: #292e42; }
+    .server-item.active { background: #3b4261; }
+    .server-name { font-size: 13px; font-weight: 500; display: inline-block; }
+    .server-host { font-size: 11px; color: #565f89; }
+    .server-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-left: 6px; }
+    .badge-ssh { background: #2d4f67; color: #7aa2f7; }
+    .badge-rdp { background: #4a2640; color: #bb9af7; }
+    .badge-tag { background: #363b54; color: #a9b1d6; margin-left: 4px; }
+
+    /* Main */
+    .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .toolbar { padding: 8px 16px; border-bottom: 1px solid #292e42; display: flex; gap: 8px; align-items: center; }
+    .toolbar input { flex: 1; padding: 6px 12px; border-radius: 6px; border: 1px solid #292e42; background: #16161e; color: #c0caf5; font-size: 13px; }
+    .toolbar button, .btn { padding: 6px 14px; border-radius: 6px; border: none; background: #7aa2f7; color: #1a1b26; font-weight: bold; cursor: pointer; font-size: 12px; }
+    .toolbar button:hover, .btn:hover { background: #89b4fa; }
+    .btn-secondary { background: #292e42; color: #c0caf5; }
+    .btn-secondary:hover { background: #3b4261; }
+    .btn-danger { background: #f7768e; color: #1a1b26; }
+    .btn-danger:hover { background: #ff9eac; }
+
+    /* Tabs */
+    .tabs { display: flex; border-bottom: 1px solid #292e42; background: #16161e; overflow-x: auto; }
+    .tab { padding: 8px 16px; cursor: pointer; font-size: 12px; border-right: 1px solid #292e42; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+    .tab.active { background: #1a1b26; color: #7aa2f7; border-bottom: 2px solid #7aa2f7; }
+    .tab-close { color: #565f89; font-weight: bold; padding: 0 4px; }
+    .tab-close:hover { color: #f7768e; }
+
+    /* Content */
+    .content { flex: 1; overflow: auto; padding: 16px; position: relative; }
+    .empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: #565f89; font-size: 14px; }
+
+    /* Terminal */
+    .terminal-host { width: 100%; height: 100%; background: #1a1b26; display: flex; flex-direction: column; }
+    .terminal { flex: 1; background: #1a1b26; font-family: "Cascadia Mono", "Consolas", monospace; font-size: 13px; padding: 8px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; }
+
+    /* RDP canvas */
+    .rdp-host { width: 100%; height: 100%; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+    .rdp-host canvas { background: #000; }
+
+    /* Modal */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; }
+    .modal { background: #1a1b26; border: 1px solid #292e42; border-radius: 8px; width: 420px; max-height: 80vh; overflow-y: auto; }
+    .modal-header { padding: 16px; border-bottom: 1px solid #292e42; display: flex; justify-content: space-between; align-items: center; }
+    .modal-body { padding: 16px; }
+    .modal-footer { padding: 16px; border-top: 1px solid #292e42; display: flex; justify-content: flex-end; gap: 8px; }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 11px; color: #565f89; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .field input, .field select { width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #292e42; background: #16161e; color: #c0caf5; font-size: 13px; }
+
+    .detail-title { font-size: 18px; font-weight: bold; }
+    .detail-sub { color: #565f89; margin: 6px 0 16px; font-size: 13px; }
+    .detail-actions { display: flex; gap: 8px; margin-bottom: 16px; }
+    .detail-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .detail-table td { padding: 6px 8px; border-bottom: 1px solid #292e42; }
+    .detail-table td:first-child { color: #565f89; width: 140px; }
+    .status-banner { padding: 10px 16px; font-size: 12px; border-radius: 6px; margin-bottom: 12px; }
+    .status-error { background: rgba(247,118,142,0.15); color: #f7768e; border: 1px solid rgba(247,118,142,0.3); }
+    .status-ok { background: rgba(158,206,106,0.15); color: #9ece6a; border: 1px solid rgba(158,206,106,0.3); }
+    .toast { position: fixed; bottom: 16px; right: 16px; background: #292e42; color: #c0caf5; padding: 10px 16px; border-radius: 6px; font-size: 12px; z-index: 100; }
+
+    .drop-zone { margin: 8px; padding: 16px 8px; border: 2px dashed #3b4261; border-radius: 8px; text-align: center; color: #565f89; cursor: pointer; }
+    .drop-zone.disabled { opacity: 0.4; cursor: not-allowed; }
+    .drop-zone.dragover { border-color: #7aa2f7; background: #1a1b26; color: #7aa2f7; }
+    .drop-zone-body strong { display: block; font-size: 12px; }
+    .drop-zone-hint { font-size: 11px; margin-top: 4px; }
+    .drop-zone-progress { margin-top: 8px; text-align: left; }
+    .dz-file { font-size: 11px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dz-bar { height: 6px; background: #292e42; border-radius: 3px; overflow: hidden; }
+    .dz-fill { height: 100%; width: 0%; background: #7aa2f7; transition: width 0.15s; }
+    .dz-actions { margin-top: 6px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>Remote Manager</span>
+        <button class="btn" onclick="addServer()">+ Add</button>
+      </div>
+      <div class="toolbar" style="border:none;padding:8px;">
+        <input type="text" id="search" placeholder="Search servers..." onchange="onSearch()" />
+      </div>
+      <div class="sidebar-content" id="server-list"></div>
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-zone-body" id="drop-zone-body">
+          <strong>Drop files to upload</strong>
+          <div class="drop-zone-hint">to the active SSH server</div>
+        </div>
+        <div class="drop-zone-progress" id="drop-zone-progress" style="display:none">
+          <div class="dz-file" id="dz-file"></div>
+          <div class="dz-bar"><div class="dz-fill" id="dz-fill"></div></div>
+          <div class="dz-actions">
+            <button class="btn btn-danger" onclick="cancelUpload()" id="dz-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="tabs" id="tabs"></div>
+      <div class="content" id="content-area">
+        <div class="empty-state">Select a server from the sidebar</div>
+      </div>
+    </div>
+  </div>
+
+  <script type="text/tiscript">
+    // ---------- State ----------
+    var servers = [];
+    var groups = [];
+    var sessions = {};   // id -> {type, title, ws, port, el, ...}
+    var sessionCounter = 0;
+    var activeSessionId = null;
+
+    function now() { return new Date().toISOString(); }
+
+    function toast(msg) {
+      var t = document.createElement("div");
+      t.className = "toast";
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(function(){ t.remove(); }, 3000);
+    }
+
+    // ---------- Load data ----------
+    function loadServers() {
+      var json = view.list_servers();
+      servers = JSON.parse(json || "[]");
+      renderSidebar();
+    }
+
+    function loadGroups() {
+      var json = view.list_groups();
+      groups = JSON.parse(json || "[]");
+    }
+
+    // ---------- Render sidebar ----------
+    function groupName(id) {
+      for (var i = 0; i < groups.length; i++) if (groups[i].id === id) return groups[i].name;
+      return null;
+    }
+
+    function renderSidebar() {
+      var el = document.getElementById("server-list");
+      var html = "";
+      var currentGroup = null;
+      var inGroup = false;
+      for (var i = 0; i < servers.length; i++) {
+        var s = servers[i];
+        var g = s.group_id ? groupName(s.group_id) : null;
+        if (g && g !== currentGroup) {
+          if (inGroup) html += "</div>";
+          html += '<div class="group-label">' + escapeHtml(g) + "</div>";
+          currentGroup = g;
+          inGroup = true;
+        } else if (!g && inGroup) {
+          html += "</div>";
+          inGroup = false;
+          currentGroup = null;
+        }
+        var badgeClass = s.protocol === "rdp" ? "badge-rdp" : "badge-ssh";
+        html += '<div class="server-item" onclick="selectServer(\'' + s.id + '\', this)">' +
+          '<div><span class="server-name">' + escapeHtml(s.name) + '</span>' +
+          '<span class="server-badge ' + badgeClass + '">' + s.protocol.toUpperCase() + '</span>' +
+          (s.tags ? ' <span class="badge-tag">' + escapeHtml(s.tags) + '</span>' : '') +
+          '</div><div class="server-host">' + escapeHtml(s.username || "") + '@' + escapeHtml(s.host) + ':' + s.port + '</div></div>';
+      }
+      if (inGroup) html += "</div>";
+      el.innerHTML = html;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function onSearch() {
+      var q = document.getElementById("search").value.trim();
+      if (!q) { loadServers(); return; }
+      var json = view.search_servers(q);
+      servers = JSON.parse(json || "[]");
+      renderSidebar();
+    }
+
+    // ---------- Select server ----------
+    function selectServer(id, el) {
+      var items = document.querySelectorAll(".server-item");
+      for (var i = 0; i < items.length; i++) items[i].classList.remove("active");
+      if (el) el.classList.add("active");
+
+      var server = null;
+      for (var i = 0; i < servers.length; i++) if (servers[i].id === id) server = servers[i];
+      if (!server) return;
+      renderDetail(server);
+    }
+
+    function renderDetail(server) {
+      var area = document.getElementById("content-area");
+      var canSsh = server.protocol === "ssh";
+      var canRdp = server.protocol === "rdp";
+      var html = '<div style="padding:8px">' +
+        '<h1 class="detail-title">' + escapeHtml(server.name) + '</h1>' +
+        '<div class="detail-sub">' + escapeHtml(server.host) + (server.port ? ":" + server.port : "") +
+        (server.description ? " &mdash; " + escapeHtml(server.description) : "") + '</div>';
+      if (canSsh || canRdp) {
+        html += '<div class="detail-actions">' +
+          (canSsh ? '<button class="btn" onclick="connectSsh(\'' + server.id + '\')">Connect SSH</button>' : '') +
+          (canRdp ? '<button class="btn" onclick="connectRdp(\'' + server.id + '\')">Connect RDP</button>' : '') +
+          '<button class="btn btn-secondary" onclick="editServer(\'' + server.id + '\')">Edit</button>' +
+          '<button class="btn btn-secondary" onclick="pingServer(\'' + server.id + '\')">Ping</button>' +
+          '<button class="btn btn-danger" onclick="deleteServer(\'' + server.id + '\')">Delete</button>' +
+          '</div>';
+      }
+      html += '<table class="detail-table">' +
+        (server.username ? '<tr><td>Username</td><td>' + escapeHtml(server.username) + '</td></tr>' : '') +
+        '<tr><td>Host</td><td>' + escapeHtml(server.host) + '</td></tr>' +
+        '<tr><td>Port</td><td>' + server.port + '</td></tr>' +
+        '<tr><td>Protocol</td><td>' + server.protocol + '</td></tr>' +
+        (server.notes ? '<tr><td>Notes</td><td>' + escapeHtml(server.notes) + '</td></tr>' : '') +
+        (server.last_connected ? '<tr><td>Last connected</td><td>' + escapeHtml(server.last_connected) + '</td></tr>' : '') +
+        '</table><div id="ping-result"></div></div>';
+      area.innerHTML = html;
+    }
+
+    // ---------- Tabs ----------
+    function renderTabs() {
+      var el = document.getElementById("tabs");
+      var html = "";
+      for (var key in sessions) {
+        var s = sessions[key];
+        html += '<div class="tab' + (key === activeSessionId ? ' active' : '') + '" onclick="activateSession(\'' + key + '\')">' +
+          escapeHtml(s.title) + '<span class="tab-close" onclick="event.stopPropagation();closeSession(\'' + key + '\')">&times;</span></div>';
+      }
+      el.innerHTML = html;
+    }
+
+    function activateSession(id) {
+      activeSessionId = id;
+      renderTabs();
+      refreshDropZone();
+      var s = sessions[id];
+      if (!s) return;
+      var area = document.getElementById("content-area");
+      area.innerHTML = "";
+      area.appendChild(s.rootEl);
+    }
+
+    function closeSession(id) {
+      var s = sessions[id];
+      if (!s) return;
+      if (s.ws && s.ws.readyState <= 1) { try { s.ws.close(); } catch(e) {} }
+      if (s.type === "ssh") { view.close_ssh_terminal(s.port); }
+      else if (s.type === "rdp") { view.close_rdp_session(s.port); }
+      if (s.rootEl && s.rootEl.parentNode) s.rootEl.parentNode.removeChild(s.rootEl);
+      delete sessions[id];
+      if (activeSessionId === id) {
+        activeSessionId = null;
+        var keys = Object.keys(sessions);
+        if (keys.length > 0) activateSession(keys[keys.length - 1]);
+        else document.getElementById("content-area").innerHTML = '<div class="empty-state">Select a server from the sidebar</div>';
+      }
+      renderTabs();
+      refreshDropZone();
+    }
+
+    // ---------- SSH terminal ----------
+    function connectSsh(id) {
+      var server = null;
+      for (var i = 0; i < servers.length; i++) if (servers[i].id === id) server = servers[i];
+      if (!server) return;
+
+      var port = view.open_ssh_terminal(server.host, server.port, server.username || "", server.id, server.name, server.ssh_key_id || "", server.credential_id || "");
+      if (!port || port <= 0) { toast("Failed to open SSH session"); return; }
+
+      var sid = "ssh-" + (++sessionCounter);
+      var rootEl = document.createElement("div");
+      rootEl.className = "terminal-host";
+      rootEl.innerHTML = '<div class="terminal" id="term-out-' + sid + '"></div>';
+      var outEl = rootEl.querySelector(".terminal");
+
+      var s = {
+        type: "ssh",
+        title: server.name + " [SSH]",
+        serverId: server.id,
+        port: port,
+        ws: null,
+        rootEl: rootEl,
+        outEl: outEl,
+        buffer: "",
+        termCols: 80,
+        termRows: 24
+      };
+      sessions[sid] = s;
+      activeSessionId = sid;
+      renderTabs();
+      refreshDropZone();
+
+      var area = document.getElementById("content-area");
+      area.innerHTML = "";
+      area.appendChild(rootEl);
+
+      openTerminalWs(sid);
+    }
+
+    function openTerminalWs(sid) {
+      var s = sessions[sid];
+      if (!s) return;
+      try {
+        var ws = new WebSocket("ws://127.0.0.1:" + s.port);
+      } catch(e) { toast("WebSocket not supported: " + e); return; }
+      s.ws = ws;
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = function() {
+        outElAppend(s, "\u001b[32m[Connected]\u001b[0m\r\n");
+        sendTerminalResize(s);
+      };
+      ws.onmessage = function(ev) {
+        var data = ev.data;
+        if (data instanceof ArrayBuffer) {
+          var arr = new Uint8Array(data);
+          if (arr.length < 1) return;
+          if (arr[0] === 1) { // MSG_DATA
+            var bytes = arr.subarray(1);
+            s.buffer += decodeUtf8(bytes);
+            renderTerminal(s);
+          } else if (arr[0] === 2) { // MSG_CLOSED
+            outElAppend(s, "\r\n\u001b[31m[Session closed]\u001b[0m\r\n");
+            try { ws.close(); } catch(e) {}
+          }
+        }
+      };
+      ws.onerror = function() { outElAppend(s, "\r\n\u001b[31m[WebSocket error]\u001b[0m\r\n"); };
+      ws.onclose = function() {};
+
+      // Keyboard input
+      outEl.addEventListener("keydown", function(ev) {
+        handleTerminalKey(s, ev);
+      });
+      outEl.addEventListener("keypress", function(ev) {
+        if (ev.charCode) {
+          sendTerminalInput(s, String.fromCharCode(ev.charCode));
+          ev.preventDefault();
+        }
+      });
+      outEl.setAttribute("tabindex", "0");
+      outEl.focus();
+
+      // Resize handling
+      if (s.outEl && s.outEl.parentNode) {
+        var host = s.outEl.parentNode;
+        host.onsize = function() { sendTerminalResize(s); };
+      }
+    }
+
+    function outElAppend(s, text) {
+      s.buffer += text;
+      renderTerminal(s);
+    }
+
+    function decodeUtf8(bytes) {
+      // Decode UTF-8 byte array to string
+      var str = "";
+      for (var i = 0; i < bytes.length; i++) {
+        var b = bytes[i];
+        if (b < 0x80) { str += String.fromCharCode(b); }
+        else if (b < 0xE0 && i + 1 < bytes.length) {
+          str += String.fromCharCode(((b & 0x1F) << 6) | (bytes[i+1] & 0x3F));
+          i++;
+        } else if (b < 0xF0 && i + 2 < bytes.length) {
+          str += String.fromCharCode(((b & 0x0F) << 12) | ((bytes[i+1] & 0x3F) << 6) | (bytes[i+2] & 0x3F));
+          i += 2;
+        }
+      }
+      return str;
+    }
+
+    function encodeUtf8(str) {
+      var bytes = [];
+      for (var i = 0; i < str.length; i++) {
+        var c = str.charCodeAt(i);
+        if (c < 0x80) bytes.push(c);
+        else if (c < 0x800) { bytes.push(0xC0 | (c >> 6), 0x80 | (c & 0x3F)); }
+        else { bytes.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F)); }
+      }
+      return bytes;
+    }
+
+    function sendTerminalInput(s, text) {
+      if (!s.ws || s.ws.readyState !== 1) return;
+      var bytes = encodeUtf8(text);
+      var buf = new ArrayBuffer(1 + bytes.length);
+      var view = new Uint8Array(buf);
+      view[0] = 0x10; // MSG_INPUT
+      for (var i = 0; i < bytes.length; i++) view[i+1] = bytes[i];
+      s.ws.send(buf);
+    }
+
+    function sendTerminalResize(s) {
+      if (!s.ws || s.ws.readyState !== 1) return;
+      var w = s.outEl ? s.outEl.clientWidth : 640;
+      var h = s.outEl ? s.outEl.clientHeight : 400;
+      var cols = Math.max(20, Math.floor(w / 8));
+      var rows = Math.max(5, Math.floor(h / 16));
+      var buf = new ArrayBuffer(5);
+      var view = new DataView(buf);
+      view.setUint8(0, 0x11); // MSG_RESIZE
+      view.setUint16(1, rows, true);
+      view.setUint16(3, cols, true);
+      s.ws.send(buf);
+    }
+
+    function handleTerminalKey(s, ev) {
+      var keyCode = ev.keyCode;
+      // Map special keys to terminal escape sequences
+      if (keyCode === 13) { sendTerminalInput(s, "\r"); ev.preventDefault(); return; }
+      if (keyCode === 8) { sendTerminalInput(s, "\x7f"); ev.preventDefault(); return; }
+      if (keyCode === 9) { sendTerminalInput(s, "\t"); ev.preventDefault(); return; }
+      if (keyCode === 27) { sendTerminalInput(s, "\x1b"); ev.preventDefault(); return; }
+
+      // Arrow keys
+      var arrows = { 37: "\x1b[D", 39: "\x1b[C", 38: "\x1b[A", 40: "\x1b[B" };
+      if (arrows[keyCode]) { sendTerminalInput(s, arrows[keyCode]); ev.preventDefault(); return; }
+
+      // Ctrl+letter
+      if (ev.ctrlKey && keyCode >= 65 && keyCode <= 90) {
+        sendTerminalInput(s, String.fromCharCode(keyCode - 64));
+        ev.preventDefault(); return;
+      }
+    }
+
+    // Minimal ANSI-aware renderer (strips escape sequences, keeps CR/LF)
+    function renderTerminal(s) {
+      var el = s.outEl;
+      if (!el) return;
+      var text = stripAnsi(s.buffer);
+      // Replace CR (carriage return only) so we don't double-space; keep LF handling simple
+      el.textContent = text;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function stripAnsi(str) {
+      // Remove ANSI escape sequences, keep visible text
+      var result = "";
+      var i = 0;
+      while (i < str.length) {
+        var c = str.charAt(i);
+        if (c === "\u001b") {
+          i++;
+          if (str.charAt(i) === "[") {
+            while (i < str.length && !/[a-zA-Z]/.test(str.charAt(i))) i++;
+            i++; // skip final letter
+            continue;
+          } else if (str.charAt(i) === "]") {
+            while (i < str.length && str.charAt(i) !== "\x07" && str.charAt(i) !== "\u001b") i++;
+            if (str.charAt(i) === "\x07") i++;
+            continue;
+          } else {
+            i++;
+            continue;
+          }
+        }
+        result += c;
+        i++;
+      }
+      return result;
+    }
+
+    // ---------- RDP canvas ----------
+    function connectRdp(id) {
+      var server = null;
+      for (var i = 0; i < servers.length; i++) if (servers[i].id === id) server = servers[i];
+      if (!server) return;
+
+      var port = view.open_rdp_session(server.host, server.username || "", 1024, 768, server.id, server.name, server.credential_id || "");
+      if (!port || port <= 0) { toast("Failed to open RDP session"); return; }
+
+      var sid = "rdp-" + (++sessionCounter);
+      var rootEl = document.createElement("div");
+      rootEl.className = "rdp-host";
+      rootEl.innerHTML = '<canvas tabindex="0" style="outline:none"></canvas>';
+      var canvas = rootEl.querySelector("canvas");
+
+      var s = { type: "rdp", title: server.name + " [RDP]", port: port, ws: null, rootEl: rootEl, canvas: canvas };
+      sessions[sid] = s;
+      activeSessionId = sid;
+      renderTabs();
+      refreshDropZone();
+
+      var area = document.getElementById("content-area");
+      area.innerHTML = "";
+      area.appendChild(rootEl);
+
+      openRdpWs(sid);
+    }
+
+    function openRdpWs(sid) {
+      var s = sessions[sid];
+      if (!s) return;
+      var ws;
+      try { ws = new WebSocket("ws://127.0.0.1:" + s.port); }
+      catch(e) { toast("WebSocket not supported: " + e); return; }
+      s.ws = ws;
+      ws.binaryType = "arraybuffer";
+      var canvas = s.canvas;
+      var ctx = canvas.getContext("2d");
+      var container = s.rootEl;
+
+      ws.onmessage = function(ev) {
+        var data = ev.data;
+        if (!(data instanceof ArrayBuffer)) return;
+        var arr = new Uint8Array(data);
+        if (arr.length < 1) return;
+        var msgType = arr[0];
+
+        if (msgType === 1 && arr.length >= 13) { // MSG_FRAME
+          var dv = new DataView(arr.buffer, arr.byteOffset);
+          var width = dv.getUint16(1, true);
+          var height = dv.getUint16(3, true);
+          var x = dv.getUint32(5, true);
+          var y = dv.getUint32(9, true);
+          var bgra = arr.subarray(13);
+
+          if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+            // Rescale canvas element to fit container while keeping aspect ratio
+            canvas.style.width = width + "px";
+            canvas.style.height = height + "px";
+          }
+
+          var rgba = new Uint8ClampedArray(bgra.length);
+          for (var i = 0; i < bgra.length; i += 4) {
+            rgba[i] = bgra[i+2];
+            rgba[i+1] = bgra[i+1];
+            rgba[i+2] = bgra[i];
+            rgba[i+3] = bgra[i+3];
+          }
+          var imageData = ctx.createImageData(width, height);
+          for (var j = 0; j < rgba.length; j++) imageData.data[j] = rgba[j];
+          ctx.putImageData(imageData, x, y);
+        } else if (msgType === 2) { // MSG_CLOSED
+          try { ws.close(); } catch(e) {}
+        }
+      };
+
+      ws.onerror = function() { toast("RDP WebSocket error"); };
+      ws.onclose = function() {};
+
+      // Mouse events
+      function mousePos(ev) {
+        var rect = canvas.getBoundingClientRect();
+        var scaleX = canvas.width ? canvas.width / rect.width : 1;
+        var scaleY = canvas.height ? canvas.height / rect.height : 1;
+        return { x: Math.round((ev.clientX - rect.left) * scaleX), y: Math.round((ev.clientY - rect.top) * scaleY) };
+      }
+
+      function sendMouse(x, y, buttonMask, eventType) {
+        if (!ws || ws.readyState !== 1) return;
+        var buf = new ArrayBuffer(7);
+        var view = new DataView(buf);
+        view.setUint8(0, 0x10); // MSG_MOUSE
+        view.setUint16(1, x, true);
+        view.setUint16(3, y, true);
+        view.setUint8(5, buttonMask);
+        view.setUint8(6, eventType);
+        ws.send(buf);
+      }
+
+      function sendKeyboard(scanCode, down) {
+        if (!ws || ws.readyState !== 1) return;
+        var buf = new ArrayBuffer(4);
+        var view = new DataView(buf);
+        view.setUint8(0, 0x11); // MSG_KEYBOARD
+        view.setUint16(1, scanCode, true);
+        view.setUint8(3, down ? 1 : 0);
+        ws.send(buf);
+      }
+
+      canvas.onmousedown = function(ev) {
+        var p = mousePos(ev);
+        var mask = ev.button === 0 ? 0x01 : ev.button === 2 ? 0x02 : 0x04;
+        sendMouse(p.x, p.y, mask, 1);
+      };
+      canvas.onmouseup = function(ev) {
+        var p = mousePos(ev);
+        var mask = ev.button === 0 ? 0x01 : ev.button === 2 ? 0x02 : 0x04;
+        sendMouse(p.x, p.y, mask, 2);
+      };
+      canvas.onmousemove = function(ev) {
+        var p = mousePos(ev);
+        sendMouse(p.x, p.y, 0, 0);
+      };
+      canvas.oncontextmenu = function(ev) { ev.preventDefault(); return false; };
+      canvas.onkeydown = function(ev) {
+        sendKeyboard(ev.keyCode, true);
+        ev.preventDefault();
+      };
+      canvas.onkeyup = function(ev) {
+        sendKeyboard(ev.keyCode, false);
+        ev.preventDefault();
+      };
+      canvas.focus();
+    }
+
+    // ---------- CRUD ----------
+    function addServer() {
+      editingServerId = null;
+      openServerModal(null);
+    }
+
+    function editServer(id) {
+      editingServerId = id;
+      var server = null;
+      for (var i = 0; i < servers.length; i++) if (servers[i].id === id) server = servers[i];
+      if (server) openServerModal(server);
+    }
+
+    function openServerModal(server) {
+      var g = server ? server.group_id : "";
+      var cred = server ? (server.credential_id || "") : "";
+      var key = server ? (server.ssh_key_id || "") : "";
+
+      var overlay = document.createElement("div");
+      overlay.className = "modal-overlay";
+      var groupOptions = '<option value="">No group</option>';
+      for (var i = 0; i < groups.length; i++) {
+        groupOptions += '<option value="' + groups[i].id + '"' + (g === groups[i].id ? ' selected' : '') + '>' + escapeHtml(groups[i].name) + '</option>';
+      }
+
+      overlay.innerHTML =
+        '<div class="modal">' +
+        '<div class="modal-header"><h3>' + (server ? "Edit Server" : "Add Server") + '</h3></div>' +
+        '<div class="modal-body">' +
+        '<div class="field"><label>Name</label><input id="m-name" value="' + (server ? escapeHtml(server.name) : "") + '"></div>' +
+        '<div class="field"><label>Host</label><input id="m-host" value="' + (server ? escapeHtml(server.host) : "") + '"></div>' +
+        '<div class="field"><label>Port</label><input id="m-port" type="number" value="' + (server ? server.port : 22) + '"></div>' +
+        '<div class="field"><label>Protocol</label><select id="m-protocol">' +
+        '<option value="ssh"' + (!server || server.protocol === "ssh" ? ' selected' : '') + '>SSH</option>' +
+        '<option value="rdp"' + (server && server.protocol === "rdp" ? ' selected' : '') + '>RDP</option>' +
+        '</select></div>' +
+        '<div class="field"><label>Username</label><input id="m-username" value="' + (server ? escapeHtml(server.username || "") : "") + '"></div>' +
+        '<div class="field"><label>Group</label><select id="m-group">' + groupOptions + '</select></div>' +
+        '<div class="field"><label>Tags</label><input id="m-tags" value="' + (server ? escapeHtml(server.tags || "") : "") + '" placeholder="comma,separated"></div>' +
+        '<div class="field"><label>Notes</label><input id="m-notes" value="' + (server ? escapeHtml(server.notes || "") : "") + '"></div>' +
+        '<div class="field"><label>Description</label><input id="m-desc" value="' + (server ? escapeHtml(server.description || "") : "") + '"></div>' +
+        '</div>' +
+        '<div class="modal-footer">' +
+        '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Cancel</button>' +
+        '<button class="btn" onclick="saveServer(this.closest(\'.modal-overlay\'))">Save</button>' +
+        '</div></div>';
+
+      document.body.appendChild(overlay);
+    }
+
+    function saveServer(overlay) {
+      var data = {
+        name: overlay.querySelector("#m-name").value,
+        host: overlay.querySelector("#m-host").value,
+        port: parseInt(overlay.querySelector("#m-port").value, 10) || 22,
+        protocol: overlay.querySelector("#m-protocol").value,
+        username: overlay.querySelector("#m-username").value,
+        group_id: overlay.querySelector("#m-group").value || null,
+        tags: overlay.querySelector("#m-tags").value,
+        notes: overlay.querySelector("#m-notes").value,
+        description: overlay.querySelector("#m-desc").value
+      };
+      var json = JSON.stringify(data);
+      try {
+        if (editingServerId) view.update_server(editingServerId, json);
+        else view.create_server(json);
+        toast("Saved");
+        overlay.remove();
+        loadServers();
+      } catch(e) { toast("Save failed: " + e); }
+      editingServerId = null;
+    }
+
+    function deleteServer(id) {
+      var server = null;
+      for (var i = 0; i < servers.length; i++) if (servers[i].id === id) server = servers[i];
+      if (!server) return;
+      var r = confirm("Delete server \"" + server.name + "\"?");
+      if (r) {
+        view.delete_server(id);
+        toast("Deleted");
+        loadServers();
+        document.getElementById("content-area").innerHTML = '<div class="empty-state">Select a server from the sidebar</div>';
+      }
+    }
+
+    function pingServer(id) {
+      var server = null;
+      for (var i = 0; i < servers.length; i++) if (servers[i].id === id) server = servers[i];
+      if (!server) return;
+      var resultEl = document.getElementById("ping-result");
+      if (resultEl) resultEl.innerHTML = '<div class="status-banner">Pinging ' + escapeHtml(server.host) + '...</div>';
+      try {
+        var result = view.ping(server.host);
+        if (resultEl) resultEl.innerHTML = '<div class="status-banner status-ok">' + escapeHtml(result) + '</div>';
+      } catch(e) {
+        if (resultEl) resultEl.innerHTML = '<div class="status-banner status-error">Ping failed</div>';
+      }
+    }
+
+    // ---------- Upload ----------
+    var uploads = {};    // jobId -> { interval, lastState }
+    var currentUpload = null;  // jobId
+
+    function uploadServerForZone() {
+      // Server of the active SSH tab, or null
+      if (!activeSessionId) return null;
+      var s = sessions[activeSessionId];
+      if (!s || s.type !== "ssh" || !s.serverId) return null;
+      for (var i = 0; i < servers.length; i++) if (servers[i].id === s.serverId) return servers[i];
+      return null;
+    }
+
+    function refreshDropZone() {
+      var zone = document.getElementById("drop-zone");
+      if (!zone) return;
+      var server = uploadServerForZone();
+      if (!server) {
+        zone.classList.add("disabled");
+        document.getElementById("drop-zone-body").innerHTML =
+          "<strong>Drop files to upload</strong><div class='drop-zone-hint'>Open an SSH terminal to upload</div>";
+      } else {
+        zone.classList.remove("disabled");
+        document.getElementById("drop-zone-body").innerHTML =
+          "<strong>Drop files to upload</strong><div class='drop-zone-hint'>to " + escapeHtml(server.host) + "</div>";
+      }
+    }
+
+    function startUpload(serverId, paths) {
+      var json = JSON.stringify(paths);
+      var jobId = view.upload_files(serverId, json);
+      if (!jobId) { toast("Upload failed to start"); return; }
+      currentUpload = jobId;
+      uploads[jobId] = {};
+      showUploadProgress();
+      uploads[jobId].interval = setInterval(function () {
+        var p = view.get_upload_progress(jobId);
+        if (!p) { stopUploadPoll(jobId); return; }
+        p = JSON.parse(p);
+        renderUploadProgress(p);
+        if (p.state === "done" || p.state === "error" || p.state === "cancelled") {
+          stopUploadPoll(jobId);
+          if (p.state === "done") { toast("Upload complete"); }
+          else if (p.state === "error") { toast("Upload failed: " + (p.error || "")); }
+          else { toast("Upload cancelled"); }
+          hideUploadProgress();
+        }
+      }, 250);
+    }
+
+    function stopUploadPoll(jobId) {
+      var u = uploads[jobId];
+      if (u && u.interval) { clearInterval(u.interval); }
+      delete uploads[jobId];
+    }
+
+    function renderUploadProgress(p) {
+      document.getElementById("dz-file").textContent =
+        "(" + (p.file_index + 1) + "/" + p.total_files + ") " + p.current_file;
+      var pct = p.total_bytes > 0 ? Math.round(p.bytes_sent * 100 / p.total_bytes) : 0;
+      document.getElementById("dz-fill").style.width = pct + "%";
+    }
+
+    function showUploadProgress() {
+      document.getElementById("drop-zone-body").style.display = "none";
+      document.getElementById("drop-zone-progress").style.display = "block";
+    }
+
+    function hideUploadProgress() {
+      currentUpload = null;
+      document.getElementById("drop-zone-progress").style.display = "none";
+      document.getElementById("drop-zone-body").style.display = "block";
+      refreshDropZone();
+    }
+
+    function cancelUpload() {
+      if (!currentUpload) return;
+      view.cancel_upload(currentUpload);
+    }
+
+    // ---------- Init ----------
+    var editingServerId = null;
+    loadGroups();
+    loadServers();
+
+    (function () {
+      var zone = document.getElementById("drop-zone");
+      if (!zone) return;
+      zone.on("dragover", function () {
+        if (!uploadServerForZone()) return;
+        this.classList.add("dragover");
+        return true; // allow drop
+      });
+      zone.on("dragleave", function () {
+        this.classList.remove("dragover");
+      });
+      zone.on("drop", function (evt) {
+        this.classList.remove("dragover");
+        var server = uploadServerForZone();
+        if (!server) return;
+        var files = evt.dataTransfer ? evt.dataTransfer.files : null;
+        if (!files || files.length === 0) return;
+        var paths = [];
+        for (var i = 0; i < files.length; i++) {
+          if (files[i].path) paths.push(files[i].path);
+        }
+        if (paths.length === 0) return;
+        startUpload(server.id, paths);
+      });
+      refreshDropZone();
+    })();
+  </script>
+</body>
+</html>
