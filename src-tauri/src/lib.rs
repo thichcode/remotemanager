@@ -6,6 +6,7 @@ mod paths;
 pub mod rdp;
 mod security;
 mod sessions;
+mod sftp;
 mod sshkeys;
 mod webview2;
 
@@ -46,6 +47,7 @@ pub fn run() {
         db: std::sync::Mutex::new(conn),
         sessions: std::sync::Arc::new(crate::sessions::SessionManager::new()),
         rdp_sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
+        upload_jobs: crate::sftp::UploadManager::new(),
     };
 
     let app = tauri::Builder::default()
@@ -100,6 +102,9 @@ pub fn run() {
             commands::sessions::cmd_ssh_resize,
             commands::sessions::cmd_ssh_close,
             commands::sessions::cmd_ssh_close_all,
+            commands::uploads::cmd_upload_files,
+            commands::uploads::cmd_get_upload_progress,
+            commands::uploads::cmd_cancel_upload,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

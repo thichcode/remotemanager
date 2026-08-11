@@ -32,6 +32,8 @@ tauri-plugin-updater = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
 tokio = { version = "1", features = ["full"] }
+russh = { version = "0.62", default-features = false, features = ["rsa", "ring", "flate2"] }
+russh-sftp = "2.3"
 tokio-tungstenite = "0.24"
 tungstenite = "0.24"
 rdp-rs = "0.1"

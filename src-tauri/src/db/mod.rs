@@ -10,6 +10,7 @@ pub struct AppState {
     pub db: Mutex<Connection>,
     pub sessions: Arc<crate::sessions::SessionManager>,
     pub rdp_sessions: Mutex<HashMap<u16, tokio::sync::oneshot::Sender<()>>>,
+    pub upload_jobs: crate::sftp::UploadManager,
 }
 
 pub fn get_db_path() -> PathBuf {
