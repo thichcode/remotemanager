@@ -32,7 +32,7 @@ tauri-plugin-updater = { version = "2", default-features = false, features = ["n
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
 tokio = { version = "1", features = ["full"] }
-russh = { version = "0.62", default-features = false, features = ["rsa", "aws-lc-rs", "flate2"] }
+russh = { version = "0.62.6", default-features = false, features = ["rsa", "aws-lc-rs", "flate2"] }
 russh-sftp = "2.3"
 tokio-tungstenite = "0.24"
 tungstenite = "0.24"

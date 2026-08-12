@@ -1,0 +1,8 @@
+# Transitive dependencies with no available fixes (rdp-rs and russh)
+[advisories]
+ignore = [
+    "RUSTSEC-2023-0071",  # rsa from russh: Marvin Attack
+    "RUSTSEC-2022-0011",  # rust-crypto from rdp-rs: AES miscomputation
+    "RUSTSEC-2022-0004",  # rustc-serialize from rdp-rs: JSON stack overflow
+    "RUSTSEC-2020-0071",  # time from rdp-rs: potential segfault
+]
