@@ -1,7 +1,7 @@
-import { Box, Text, Group, ActionIcon, Stack, Divider, TextInput, Button, Modal, SegmentedControl } from '@mantine/core';
-import { IconPlus, IconServer, IconStar, IconFolder, IconChevronRight, IconDownload } from '@tabler/icons-react';
+import { Box, Text, Group, ActionIcon, Stack, Divider, TextInput, Button, Modal, SegmentedControl, Notification, Loader } from '@mantine/core';
+import { IconPlus, IconServer, IconStar, IconFolder, IconChevronRight, IconDownload, IconClock, IconRotate } from '@tabler/icons-react';
 import { useStore } from '../store/useStore';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { exportCsv, exportJson } from '../services/tauri';
 import { notifications } from '@mantine/notifications';
 import { modals } from '@mantine/modals';
@@ -17,6 +17,7 @@ const UNGROUPED_ID = '__ungrouped__';
 export function Sidebar() {
   const groups = useStore((s) => s.groups);
   const servers = useStore((s) => s.servers);
+  const isLoading = useStore((s) => s.isLoading);
   const selectedGroupId = useStore((s) => s.selectedGroupId);
   const setSelectedGroup = useStore((s) => s.setSelectedGroup);
   const createGroup = useStore((s) => s.createGroup);
@@ -25,12 +26,23 @@ export function Sidebar() {
   const toggleGroupExpanded = useStore((s) => s.toggleGroupExpanded);
   const activeSessionTabId = useStore((s) => s.activeSessionTabId);
   const sessionTabs = useStore((s) => s.sessionTabs);
+  const recentServers = useStore((s) => s.recentServers);
+  const undoAction = useStore((s) => s.undoAction);
+  const performUndo = useStore((s) => s.performUndo);
+  const clearUndo = useStore((s) => s.clearUndo);
   const [newGroupName, setNewGroupName] = useState('');
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
 
   const activeTab = sessionTabs.find((t) => t.id === activeSessionTabId && t.protocol === 'ssh');
   const activeServer = activeTab?.serverId ? servers.find((s) => s.id === activeTab!.serverId) ?? null : null;
+
+  useEffect(() => {
+    if (undoAction) {
+      const timeout = setTimeout(() => clearUndo(), 5000);
+      return () => clearTimeout(timeout);
+    }
+  }, [undoAction, clearUndo]);
 
   const favorites = servers.filter(s => s.favorite);
   const rootGroups = groups.filter(g => !g.parent_id);
@@ -53,6 +65,24 @@ export function Sidebar() {
 
   return (
     <Box>
+      {isLoading && (
+        <Group justify="center" py="xs"><Loader size="xs" /><Text size="xs" c="dimmed">Loading...</Text></Group>
+      )}
+      {undoAction && (
+        <Notification
+          title={`"${undoAction.data.name}" deleted`}
+          color="blue"
+          withCloseButton
+          onClose={clearUndo}
+          p="xs"
+          mb="xs"
+        >
+          <Group gap="xs">
+            <Text size="xs">Undo?</Text>
+            <Button size="xs" variant="light" leftSection={<IconRotate size={12} />} onClick={performUndo}>Undo</Button>
+          </Group>
+        </Notification>
+      )}
       <Stack gap={4}>
         <Text size="xs" fw={600} c="dimmed" tt="uppercase">Quick Access</Text>
         <Group
@@ -83,6 +113,22 @@ export function Sidebar() {
           >
             <IconStar size={16} />
             <Text size="sm">Favorites ({favorites.length})</Text>
+          </Group>
+        )}
+        {recentServers.length > 0 && (
+          <Group
+            gap={8}
+            p="xs"
+            style={{ cursor: 'pointer', borderRadius: 4 }}
+            bg={selectedGroupId === '__recent__' ? 'var(--mantine-color-dark-5)' : undefined}
+            onClick={() => setSelectedGroup('__recent__')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedGroup('__recent__'); } }}
+            tabIndex={0}
+            role="button"
+            aria-label="Show recent servers"
+          >
+            <IconClock size={16} />
+            <Text size="sm">Recent ({recentServers.length})</Text>
           </Group>
         )}
       </Stack>
@@ -150,6 +196,13 @@ export function Sidebar() {
           <Box>
             <Text size="xs" c="dimmed" p="xs">Ungrouped</Text>
             <GroupServerTree servers={ungroupedServers} />
+          </Box>
+        )}
+
+        {selectedGroupId === '__recent__' && recentServers.length > 0 && (
+          <Box>
+            <Text size="xs" c="dimmed" p="xs">Recently connected</Text>
+            <GroupServerTree servers={recentServers} />
           </Box>
         )}
 

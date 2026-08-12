@@ -4,6 +4,12 @@ import * as api from '../services/tauri';
 
 const FAVORITES_ID = '__favorites__';
 
+interface UndoAction {
+  type: 'deleteServer';
+  data: Server;
+  timestamp: number;
+}
+
 interface AppState {
   servers: Server[];
   groups: Group[];
@@ -18,6 +24,8 @@ interface AppState {
   sessionTabs: SessionTab[];
   activeSessionTabId: string | null;
   expandedGroups: Record<string, boolean>;
+  recentServers: Server[];
+  undoAction: UndoAction | null;
 
   loadServers: () => Promise<void>;
   loadGroups: () => Promise<void>;
@@ -49,6 +57,9 @@ interface AppState {
   openRdpTab: (server: Server) => Promise<void>;
   closeSessionTab: (id: string) => Promise<void>;
   focusSessionTab: (id: string) => void;
+  addRecentServer: (server: Server) => void;
+  performUndo: () => Promise<void>;
+  clearUndo: () => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -65,6 +76,8 @@ export const useStore = create<AppState>((set, get) => ({
   sessionTabs: [],
   activeSessionTabId: null,
   expandedGroups: {},
+  recentServers: [],
+  undoAction: null,
 
   loadServers: async () => {
     try {
@@ -73,6 +86,10 @@ export const useStore = create<AppState>((set, get) => ({
       if (groupId === FAVORITES_ID) {
         const all = await api.listServers(null);
         set({ servers: all.filter(s => s.favorite), isLoading: false });
+        return;
+      }
+      if (groupId === '__recent__') {
+        set({ isLoading: false });
         return;
       }
       const servers = await api.listServers(groupId);
@@ -133,8 +150,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   deleteServer: async (id) => {
+    const server = get().servers.find(s => s.id === id);
+    if (!server) return;
     await api.deleteServer(id);
-    set({ servers: get().servers.filter(s => s.id !== id) });
+    set({
+      servers: get().servers.filter(s => s.id !== id),
+      undoAction: { type: 'deleteServer', data: server, timestamp: Date.now() },
+    });
   },
 
   toggleFavorite: async (id) => {
@@ -249,6 +271,7 @@ export const useStore = create<AppState>((set, get) => ({
       ],
       activeSessionTabId: tabId,
     });
+    get().addRecentServer(server);
     try {
       const sessionId = await api.openSshSession({
         host: server.host,
@@ -287,6 +310,7 @@ export const useStore = create<AppState>((set, get) => ({
       ],
       activeSessionTabId: tabId,
     });
+    get().addRecentServer(server);
     try {
       const wsPort = await api.openRdpSession({
         host: server.host,
@@ -335,4 +359,24 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   focusSessionTab: (id) => set({ activeSessionTabId: id }),
+
+  addRecentServer: (server) => set((s) => {
+    const existing = s.recentServers.filter(r => r.id !== server.id);
+    return { recentServers: [server, ...existing].slice(0, 5) };
+  }),
+
+  performUndo: async () => {
+    const action = get().undoAction;
+    if (!action) return;
+    if (action.type === 'deleteServer') {
+      await api.createServer(action.data);
+      const now = new Date().toISOString();
+      set({
+        servers: [...get().servers, { ...action.data, created_at: now, updated_at: now }],
+        undoAction: null,
+      });
+    }
+  },
+
+  clearUndo: () => set({ undoAction: null }),
 }));

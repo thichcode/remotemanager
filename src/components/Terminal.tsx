@@ -7,6 +7,22 @@ import { Stack, Text } from '@mantine/core';
 import { useStore } from '../store/useStore';
 import type { SessionTab } from '../types';
 
+function exitCodeMessage(code: number): string {
+  const messages: Record<number, string> = {
+    1: 'General error',
+    2: 'Misuse of shell builtins',
+    126: 'Command not executable',
+    127: 'Command not found',
+    128: 'Invalid exit argument',
+    129: 'SIGHUP (terminal closed)',
+    130: 'SIGINT (Ctrl+C)',
+    137: 'SIGKILL',
+    143: 'SIGTERM',
+    255: 'SSH error / connection failed',
+  };
+  return messages[code] ?? `Exit code ${code}`;
+}
+
 interface Props {
   tab: SessionTab;
   active: boolean;
@@ -64,7 +80,7 @@ export function Terminal({ tab, active }: Props) {
     });
     const unlistenExit = listen<{ sessionId: string; code: number }>('ssh://exit', (event) => {
       if (event.payload.sessionId !== sessionRef.current) return;
-      term.write(`\r\n\x1b[31mConnection closed (code ${event.payload.code})\x1b[0m\r\n`);
+      term.write(`\r\n\x1b[31mConnection closed (${exitCodeMessage(event.payload.code)})\x1b[0m\r\n`);
       (term.options as { readonly?: boolean }).readonly = true;
     });
     let cancelled = false;

@@ -344,7 +344,7 @@ export function SftpBrowser({ serverId, serverHost, onClearHistory }: Props) {
       </Group>
 
       {!enabled ? (
-        <Text size="xs" c="dimmed" px={6}>Open an SSH terminal to browse files.</Text>
+        <Text size="xs" c="dimmed" px={6}>Connect to an SSH server to browse files.</Text>
       ) : (
         <Box
           style={{
@@ -352,6 +352,8 @@ export function SftpBrowser({ serverId, serverHost, onClearHistory }: Props) {
             borderRadius: 6,
             padding: 4,
             minHeight: 60,
+            transition: 'border-color 0.15s',
+            background: dragging ? 'rgba(34, 139, 230, 0.05)' : 'transparent',
           }}
           onDragOver={onGlobalDragOver}
           onDragLeave={onGlobalDragLeave}

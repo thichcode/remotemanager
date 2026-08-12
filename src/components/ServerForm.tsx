@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { TextInput, NumberInput, Select, Textarea, Button, Stack, Group } from '@mantine/core';
+import { useState, useEffect, useRef } from 'react';
+import { TextInput, NumberInput, Select, Textarea, Button, Stack, Group, Text } from '@mantine/core';
 import { useStore } from '../store/useStore';
 import { modals } from '@mantine/modals';
 import type { Server } from '../types';
@@ -17,11 +17,50 @@ export function ServerForm({ server }: { server?: Server }) {
   const [description, setDescription] = useState(server?.description ?? '');
   const [credentialId, setCredentialId] = useState<string | null>(server?.credential_id ?? null);
   const [sshKeyId, setSshKeyId] = useState<string | null>(server?.ssh_key_id ?? null);
+  const initialValuesRef = useRef({
+    name: server?.name ?? '',
+    host: server?.host ?? '',
+    port: server?.port ?? 22,
+    protocol: server?.protocol ?? 'ssh',
+    username: server?.username ?? '',
+    group_id: server?.group_id ?? null,
+    tags: server?.tags ?? '',
+    notes: server?.notes ?? '',
+    description: server?.description ?? '',
+    credential_id: server?.credential_id ?? null,
+    ssh_key_id: server?.ssh_key_id ?? null,
+  });
+
+  const isDirty = name !== initialValuesRef.current.name ||
+    host !== initialValuesRef.current.host ||
+    port !== initialValuesRef.current.port ||
+    protocol !== initialValuesRef.current.protocol ||
+    username !== initialValuesRef.current.username ||
+    groupId !== initialValuesRef.current.group_id ||
+    tags !== initialValuesRef.current.tags ||
+    notes !== initialValuesRef.current.notes ||
+    description !== initialValuesRef.current.description ||
+    credentialId !== initialValuesRef.current.credential_id ||
+    sshKeyId !== initialValuesRef.current.ssh_key_id;
 
   useEffect(() => {
     loadCredentials();
     if (useStore.getState().sshKeys.length === 0) loadSshKeys();
   }, []);
+
+  const handleCancel = () => {
+    if (isDirty) {
+      modals.openConfirmModal({
+        title: 'Discard changes?',
+        children: <Text size="sm">You have unsaved changes.</Text>,
+        labels: { confirm: 'Discard', cancel: 'Keep Editing' },
+        confirmProps: { color: 'red' },
+        onConfirm: () => modals.closeAll(),
+      });
+    } else {
+      modals.closeAll();
+    }
+  };
 
   const handleSubmit = async () => {
     if (!name.trim() || !host.trim() || !protocol) return;
@@ -147,7 +186,7 @@ export function ServerForm({ server }: { server?: Server }) {
         onChange={(e) => setDescription(e.currentTarget.value)}
       />
       <Group justify="flex-end">
-        <Button variant="subtle" onClick={() => modals.closeAll()}>Cancel</Button>
+        <Button variant="subtle" onClick={handleCancel}>Cancel</Button>
         <Button onClick={handleSubmit} disabled={!name.trim() || !host.trim() || !protocol}>
           {server ? 'Save Changes' : 'Save Server'}
         </Button>
