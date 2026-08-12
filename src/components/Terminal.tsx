@@ -74,6 +74,17 @@ export function Terminal({ tab, active }: Props) {
       }
     });
 
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'R') {
+        term.reset();
+        fit.fit();
+        const sid = sessionRef.current;
+        if (sid) sshResize(sid, term.cols, term.rows).catch(() => {});
+        return false;
+      }
+      return true;
+    });
+
     const unlistenOutput = listen<{ sessionId: string; data: number[] }>('ssh://output', (event) => {
       if (event.payload.sessionId !== sessionRef.current) return;
       term.write(new Uint8Array(event.payload.data));
