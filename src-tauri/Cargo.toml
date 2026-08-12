@@ -28,11 +28,11 @@ dirs = "5.0"
 base64 = "0.22"
 zip = { version = "2.1", features = ["deflate"] }
 portable-pty = "0.9"
-tauri-plugin-updater = "2"
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls", "zip"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
 tokio = { version = "1", features = ["full"] }
-russh = { version = "0.62", default-features = false, features = ["rsa", "ring", "flate2"] }
+russh = { version = "0.62", default-features = false, features = ["rsa", "aws-lc-rs", "flate2"] }
 russh-sftp = "2.3"
 tokio-tungstenite = "0.24"
 tungstenite = "0.24"
