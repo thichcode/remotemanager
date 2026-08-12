@@ -14,7 +14,7 @@ impl AppHandler {
                 sessions: Arc::new(crate::backend::sessions::SessionManager::new()),
                 rdp_sessions: Mutex::new(std::collections::HashMap::new()),
                 terminal_sessions: Mutex::new(std::collections::HashMap::new()),
-                upload_jobs: crate::backend::sftp::UploadManager::new(),
+                upload_jobs: crate::backend::sftp::SftpBrowserManager::new(),
             })),
         }
     }
@@ -59,9 +59,13 @@ impl sciter::EventHandler for AppHandler {
             "close_ssh_terminal" => self.close_ssh_terminal(args),
             "open_rdp_session" => self.open_rdp_session(args),
             "close_rdp_session" => self.close_rdp_session(args),
-            "upload_files" => self.upload_files(args),
-            "get_upload_progress" => self.get_upload_progress(args),
-            "cancel_upload" => self.cancel_upload(args),
+            "sftp_open" => self.sftp_open(args),
+            "sftp_list" => self.sftp_list(args),
+            "sftp_get_home" => self.sftp_get_home(args),
+            "sftp_upload" => self.sftp_upload(args),
+            "sftp_download" => self.sftp_download(args),
+            "get_upload_progress" => self.get_download_progress(args),
+            "cancel_upload" => self.cancel_download(args),
             _ => None,
         }
     }
@@ -453,58 +457,80 @@ impl AppHandler {
         Some(Value::from(true))
     }
 
-    /// Start an SFTP upload batch for a server. Returns the job id.
-    fn upload_files(&self, args: &[Value]) -> Option<Value> {
-        let server_id = get_string(args, 0)?;
-        let local_paths_json = get_string(args, 1)?;
-        let paths: Vec<String> = serde_json::from_str(&local_paths_json).ok()?;
-
+    fn resolve_server_auth(&self, server_id: &str) -> Option<(String, i32, String, crate::backend::sftp::UploadAuth)> {
         let (host, port, username, credential_id, ssh_key_id) = {
             let state = self.state.lock().ok()?;
             let conn = state.db.lock().ok()?;
-            let server = crate::backend::db::operations::get_server(&conn, &server_id).ok()??;
-            (
-                server.host.clone(),
-                server.port,
-                server.username.clone(),
-                server.credential_id.clone(),
-                server.ssh_key_id.clone(),
-            )
+            let server = crate::backend::db::operations::get_server(&conn, server_id).ok()??;
+            (server.host.clone(), server.port, server.username.clone(),
+             server.credential_id.clone(), server.ssh_key_id.clone())
         };
-
         let username = self.resolve_username(&username, credential_id.as_deref())?;
         let password = self.resolve_password(credential_id.as_deref());
         let key_path = self.resolve_ssh_key(ssh_key_id.as_deref());
-
         let auth = match (password, key_path) {
             (Some(pw), _) => crate::backend::sftp::UploadAuth::Password(pw),
             (None, Some(kp)) => crate::backend::sftp::UploadAuth::Key(kp),
             (None, None) => return None,
         };
+        Some((host, port, username, auth))
+    }
 
+    fn sftp_open(&self, args: &[Value]) -> Option<Value> {
+        let server_id = get_string(args, 0)?;
+        let (host, port, username, auth) = self.resolve_server_auth(&server_id)?;
         let state = self.state.lock().ok()?;
-        let job_id = state.upload_jobs.start_upload(
-            host,
-            port,
-            username,
-            auth,
-            paths,
-        ).ok()?;
+        let home = state.upload_jobs.open_browser(&server_id, host, port, username, auth).ok()?;
+        Some(Value::from(home))
+    }
 
+    fn sftp_list(&self, args: &[Value]) -> Option<Value> {
+        let server_id = get_string(args, 0)?;
+        let path = get_string(args, 1)?;
+        let state = self.state.lock().ok()?;
+        let entries = state.upload_jobs.list_dir(&server_id, &path).ok()?;
+        let json = serde_json::to_string(&entries).ok()?;
+        json_to_value(&json)
+    }
+
+    fn sftp_get_home(&self, args: &[Value]) -> Option<Value> {
+        let server_id = get_string(args, 0)?;
+        let state = self.state.lock().ok()?;
+        let home = state.upload_jobs.get_home(&server_id)?;
+        Some(Value::from(home))
+    }
+
+    fn sftp_upload(&self, args: &[Value]) -> Option<Value> {
+        let server_id = get_string(args, 0)?;
+        let remote_dir = get_string(args, 1)?;
+        let paths_json = get_string(args, 2)?;
+        let paths: Vec<String> = serde_json::from_str(&paths_json).ok()?;
+        let (host, port, username, auth) = self.resolve_server_auth(&server_id)?;
+        let state = self.state.lock().ok()?;
+        let job_id = state.upload_jobs.start_upload(host, port, username, auth, remote_dir, paths).ok()?;
         Some(Value::from(job_id))
     }
 
-    /// Poll the progress of an upload job.
-    fn get_upload_progress(&self, args: &[Value]) -> Option<Value> {
+    fn sftp_download(&self, args: &[Value]) -> Option<Value> {
+        let server_id = get_string(args, 0)?;
+        let local_dir = get_string(args, 1)?;
+        let remote_paths_json = get_string(args, 2)?;
+        let remote_paths: Vec<String> = serde_json::from_str(&remote_paths_json).ok()?;
+        let (host, port, username, auth) = self.resolve_server_auth(&server_id)?;
+        let state = self.state.lock().ok()?;
+        let job_id = state.upload_jobs.start_download(host, port, username, auth, local_dir, remote_paths).ok()?;
+        Some(Value::from(job_id))
+    }
+
+    fn get_download_progress(&self, args: &[Value]) -> Option<Value> {
         let job_id = get_string(args, 0)?;
         let state = self.state.lock().ok()?;
-        let p = state.upload_jobs.get_progress(&job_id)?;
+        let p = state.upload_jobs.get_download_progress(&job_id)?;
         let json = serde_json::to_string(&p).ok()?;
         json_to_value(&json)
     }
 
-    /// Cancel an upload job.
-    fn cancel_upload(&self, args: &[Value]) -> Option<Value> {
+    fn cancel_download(&self, args: &[Value]) -> Option<Value> {
         let job_id = get_string(args, 0)?;
         let state = self.state.lock().ok()?;
         state.upload_jobs.cancel(&job_id);
