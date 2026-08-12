@@ -9,7 +9,6 @@ permissions:
 
 env:
   NODE_VERSION: "20"
-  RUST_TARGET: x86_64-pc-windows-msvc
 
 jobs:
   release:
@@ -60,8 +59,6 @@ jobs:
       - name: Setup Rust
         if: steps.version.outputs.changed == 'true'
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ env.RUST_TARGET }}
 
       - name: Install NSIS and NASM
         if: steps.version.outputs.changed == 'true'
@@ -106,11 +103,9 @@ jobs:
 
             ### Auto-Update
             The app checks for updates automatically. Install and restart.
-          releaseDraft: false
+releaseDraft: false
           prerelease: false
-          # tauri-action appends args after `npm run tauri build --`; the extra
-          # separator keeps npm from stripping `--target` before Tauri sees it.
-          args: "-- --target ${{ env.RUST_TARGET }}"
+          # runner is windows-latest (msvc-native); no --target needed
 
   sciter-release:
     runs-on: windows-latest
@@ -122,8 +117,6 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ env.RUST_TARGET }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2

@@ -8,7 +8,6 @@ on:
 
 env:
   NODE_VERSION: "20"
-  RUST_TARGET: x86_64-pc-windows-msvc
 
 jobs:
   check:
@@ -30,8 +29,6 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ env.RUST_TARGET }}
 
       - name: Install NSIS and NASM
         run: choco install nsis nasm -y --no-progress
@@ -44,4 +41,4 @@ jobs:
 
       - name: Rust check
         working-directory: src-tauri
-        run: cargo check --target ${{ env.RUST_TARGET }}
+        run: cargo check
