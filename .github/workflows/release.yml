@@ -9,6 +9,7 @@ permissions:
 
 env:
   NODE_VERSION: "20"
+  RUST_TARGET: x86_64-pc-windows-msvc
 
 jobs:
   release:
@@ -59,6 +60,8 @@ jobs:
       - name: Setup Rust
         if: steps.version.outputs.changed == 'true'
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.RUST_TARGET }}
 
       - name: Install NSIS and NASM
         if: steps.version.outputs.changed == 'true'
@@ -76,7 +79,6 @@ jobs:
         shell: bash
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
-          # Update version in tauri.conf.json using node
           node -e "
             const fs = require('fs');
             const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
@@ -99,13 +101,39 @@ jobs:
             ## Remote Manager ${{ steps.version.outputs.tag }}
 
             ### Installation
-            - **Portable ZIP**: Download `Remote Manager_*_x64_en-US.zip`, extract and run `Remote Manager.exe`.
+            - **NSIS Installer**: Download `Remote Manager_*_x64_en-US.exe` and run the installer.
+            - **Portable ZIP**: Download `Remote Manager.zip`, extract and run `Remote Manager.exe`.
 
             ### Auto-Update
             The app checks for updates automatically. Install and restart.
-releaseDraft: false
+          releaseDraft: false
           prerelease: false
-          # runner is windows-latest (msvc-native); no --target needed
+          args: "--target ${{ env.RUST_TARGET }}"
+
+      - name: Create portable ZIP
+        if: steps.version.outputs.changed == 'true'
+        shell: bash
+        run: |
+          EXE="src-tauri/target/${{ env.RUST_TARGET }}/release/remote-manager-mvp.exe"
+          ZIP="src-tauri/target/release/bundle/portable.zip"
+          mkdir -p portable
+          cp "$EXE" "portable/Remote Manager.exe"
+          if [ -d "src-tauri/target/${{ env.RUST_TARGET }}/release/resources" ]; then
+            cp -r "src-tauri/target/${{ env.RUST_TARGET }}/release/resources/." "portable/"
+          fi
+          cd portable
+          powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../portable-tmp.zip -Force"
+          cd ..
+          mkdir -p "$(dirname "$ZIP")"
+          mv portable-tmp.zip "$ZIP"
+          rm -rf portable
+
+      - name: Upload portable ZIP to Release
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ steps.version.outputs.tag }}" "src-tauri/target/release/bundle/portable.zip" --clobber
 
   sciter-release:
     runs-on: windows-latest
@@ -117,6 +145,8 @@ releaseDraft: false
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.RUST_TARGET }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
