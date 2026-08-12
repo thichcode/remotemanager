@@ -33,6 +33,9 @@ jobs:
         with:
           targets: ${{ env.RUST_TARGET }}
 
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
