@@ -643,7 +643,7 @@ pub fn list_recent_servers(conn: &Connection, limit: usize) -> rusqlite::Result<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::schema;
+    use crate::backend::db::schema;
 
     fn test_conn() -> Connection {
         let conn = Connection::open_in_memory().expect("open memory db");
