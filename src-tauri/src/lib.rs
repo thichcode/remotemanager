@@ -47,7 +47,7 @@ pub fn run() {
         db: std::sync::Mutex::new(conn),
         sessions: std::sync::Arc::new(crate::sessions::SessionManager::new()),
         rdp_sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
-        upload_jobs: crate::sftp::UploadManager::new(),
+        upload_jobs: crate::sftp::SftpBrowserManager::new(),
     };
 
     let app = tauri::Builder::default()
@@ -102,7 +102,11 @@ pub fn run() {
             commands::sessions::cmd_ssh_resize,
             commands::sessions::cmd_ssh_close,
             commands::sessions::cmd_ssh_close_all,
-            commands::uploads::cmd_upload_files,
+            commands::uploads::cmd_sftp_open,
+            commands::uploads::cmd_sftp_list,
+            commands::uploads::cmd_sftp_get_home,
+            commands::uploads::cmd_sftp_upload,
+            commands::uploads::cmd_sftp_download,
             commands::uploads::cmd_get_upload_progress,
             commands::uploads::cmd_cancel_upload,
         ])
