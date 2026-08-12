@@ -9,7 +9,7 @@ permissions:
 
 env:
   NODE_VERSION: "20"
-  RUST_TARGET: x86_64-pc-windows-gnu
+  RUST_TARGET: x86_64-pc-windows-msvc
 
 jobs:
   release:
