@@ -143,10 +143,10 @@ export const listTags = (): Promise<string[]> =>
   invoke('cmd_list_tags');
 
 export const setServerTags = (serverId: string, tags: string[]): Promise<void> =>
-  invoke('cmd_set_server_tags', { serverId, tags });
+  invoke('cmd_set_server_tags', { host_id: serverId, names: tags });
 
 export const listTagsForServer = (serverId: string): Promise<string[]> =>
-  invoke('cmd_list_tags_for_server', { serverId });
+  invoke('cmd_list_tags_for_server', { host_id: serverId });
 
 export const listRecentServers = (limit?: number): Promise<Server[]> =>
   invoke('cmd_list_recent_servers', { limit });
@@ -218,16 +218,16 @@ export const closeRdpSession = (wsPort: number): Promise<void> =>
 
 // SFTP Browser
 export const sftpOpen = (serverId: string): Promise<string> =>
-  invoke('cmd_sftp_open', { serverId });
+  invoke('cmd_sftp_open', { server_id: serverId });
 export const sftpList = (serverId: string, path: string): Promise<RemoteEntry[]> =>
-  invoke('cmd_sftp_list', { serverId, path });
+  invoke('cmd_sftp_list', { server_id: serverId, path });
 export const sftpGetHome = (serverId: string): Promise<string | null> =>
-  invoke('cmd_sftp_get_home', { serverId });
+  invoke('cmd_sftp_get_home', { server_id: serverId });
 export const sftpUpload = (serverId: string, remoteDir: string, localPaths: string[]): Promise<string> =>
-  invoke('cmd_sftp_upload', { serverId, remoteDir, localPaths });
+  invoke('cmd_sftp_upload', { server_id: serverId, remote_dir: remoteDir, local_paths: localPaths });
 export const sftpDownload = (serverId: string, localDir: string, remotePaths: string[]): Promise<string> =>
-  invoke('cmd_sftp_download', { serverId, localDir, remotePaths });
+  invoke('cmd_sftp_download', { server_id: serverId, local_dir: localDir, remote_paths: remotePaths });
 export const getUploadProgress = (jobId: string): Promise<UploadProgress | null> =>
-  invoke('cmd_get_upload_progress', { jobId });
+  invoke('cmd_get_upload_progress', { job_id: jobId });
 export const cancelUpload = (jobId: string): Promise<void> =>
-  invoke('cmd_cancel_upload', { jobId });
+  invoke('cmd_cancel_upload', { job_id: jobId });
