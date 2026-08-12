@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Server, Group, Credential, Settings, HistoryEntry, SshKey, BackupSummary, UploadProgress } from '../types';
+import type { Server, Group, Credential, Settings, HistoryEntry, SshKey, BackupSummary, UploadProgress, RemoteEntry } from '../types';
 
 // Servers
 export const createServer = (server: Server): Promise<string> =>
@@ -216,12 +216,18 @@ export const openRdpSession = (args: {
 export const closeRdpSession = (wsPort: number): Promise<void> =>
   invoke('cmd_close_rdp_session', { ws_port: wsPort });
 
-// SFTP Upload
-export const uploadFiles = (serverId: string, localPaths: string[]): Promise<string> =>
-  invoke('cmd_upload_files', { serverId, localPaths });
-
+// SFTP Browser
+export const sftpOpen = (serverId: string): Promise<string> =>
+  invoke('cmd_sftp_open', { serverId });
+export const sftpList = (serverId: string, path: string): Promise<RemoteEntry[]> =>
+  invoke('cmd_sftp_list', { serverId, path });
+export const sftpGetHome = (serverId: string): Promise<string | null> =>
+  invoke('cmd_sftp_get_home', { serverId });
+export const sftpUpload = (serverId: string, remoteDir: string, localPaths: string[]): Promise<string> =>
+  invoke('cmd_sftp_upload', { serverId, remoteDir, localPaths });
+export const sftpDownload = (serverId: string, localDir: string, remotePaths: string[]): Promise<string> =>
+  invoke('cmd_sftp_download', { serverId, localDir, remotePaths });
 export const getUploadProgress = (jobId: string): Promise<UploadProgress | null> =>
   invoke('cmd_get_upload_progress', { jobId });
-
 export const cancelUpload = (jobId: string): Promise<void> =>
   invoke('cmd_cancel_upload', { jobId });

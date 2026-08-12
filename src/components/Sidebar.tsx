@@ -8,7 +8,7 @@ import { modals } from '@mantine/modals';
 import { save } from '@tauri-apps/plugin-dialog';
 import { GroupServerTree } from './GroupServerTree';
 import { ServerForm } from './ServerForm';
-import { DropZone } from './DropZone';
+import { SftpBrowser } from './SftpBrowser';
 import type { Server } from '../types';
 
 const FAVORITES_ID = '__favorites__';
@@ -89,9 +89,9 @@ export function Sidebar() {
 
       <Divider my="md" />
 
-      <DropZone
-        activeServerId={activeServer?.id ?? null}
-        activeServerHost={activeServer?.host ?? null}
+      <SftpBrowser
+        serverId={activeServer?.id ?? null}
+        serverHost={activeServer?.host ?? null}
         onClearHistory={() => {
           modals.openConfirmModal({
             title: 'Clear History',

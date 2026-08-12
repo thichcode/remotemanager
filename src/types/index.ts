@@ -84,11 +84,19 @@ export interface SessionTab {
 }
 
 export interface UploadProgress {
-  state: 'uploading' | 'done' | 'error' | 'cancelled';
+  state: 'uploading' | 'downloading' | 'done' | 'error' | 'cancelled';
   current_file: string;
   file_index: number;
   total_files: number;
   bytes_sent: number;
   total_bytes: number;
   error: string | null;
+}
+
+export interface RemoteEntry {
+  name: string;
+  is_dir: boolean;
+  size: number;
+  mtime: number;
+  is_hidden: boolean;
 }
