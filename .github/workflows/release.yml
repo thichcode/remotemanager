@@ -63,9 +63,9 @@ jobs:
         with:
           targets: ${{ env.RUST_TARGET }}
 
-      - name: Install NSIS
+      - name: Install NSIS and NASM
         if: steps.version.outputs.changed == 'true'
-        run: choco install nsis -y --no-progress
+        run: choco install nsis nasm -y --no-progress
 
       - name: Rust cache
         if: steps.version.outputs.changed == 'true'
@@ -108,7 +108,9 @@ jobs:
             The app checks for updates automatically. Install and restart.
           releaseDraft: false
           prerelease: false
-          args: "--target ${{ env.RUST_TARGET }}"
+          # tauri-action appends args after `npm run tauri build --`; the extra
+          # separator keeps npm from stripping `--target` before Tauri sees it.
+          args: "-- --target ${{ env.RUST_TARGET }}"
 
   sciter-release:
     runs-on: windows-latest
