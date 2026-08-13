@@ -60,7 +60,8 @@ test('SSH key selection persists across edit and reload', async ({ page }) => {
 
   // attach key via edit form
   await expect(page.getByText('gitlab', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Edit server' }).click();
+  await page.getByText('gitlab', { exact: true }).click({ button: 'right' });
+  await page.getByRole('button', { name: 'Edit' }).click();
 
   await page.getByRole('textbox', { name: 'SSH Key' }).click();
   await page.getByRole('option', { name: 'crewkey' }).click();
@@ -71,9 +72,10 @@ test('SSH key selection persists across edit and reload', async ({ page }) => {
   await expect(page.getByText('gitlab', { exact: true })).toBeVisible();
 });
 
-test('favoriting increments sidebar count', async ({ page }) => {
+test('favoriting via context menu increments sidebar count', async ({ page }) => {
   await boot(page, { servers: [makeServer({ id: 's1', name: 'web1', favorite: false })] });
   await expect(page.getByText('web1', { exact: true })).toBeVisible();
+  await page.getByText('web1', { exact: true }).click({ button: 'right' });
   await page.getByRole('button', { name: 'Toggle favorite' }).click();
   await expect(page.getByText('Favorites (1)', { exact: true })).toBeVisible();
 });
@@ -131,7 +133,7 @@ test('ssh connect opens embedded terminal tab and streams output', async ({ page
   });
 
   await expect(page.getByText('web-node', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Connect server' }).click();
+  await page.getByText('web-node', { exact: true }).click();
 
   await expect(page.getByText('ubuntu@10.0.0.66', { exact: true })).toBeVisible();
   await expect(page.locator('.xterm')).toContainText('mock ssh session ready');
@@ -143,7 +145,7 @@ test('ssh terminal sends keystrokes and closes session', async ({ page }) => {
     sshKeys: [{ id: 'key-001', name: 'crewkey', public_key: 'ssh-ed25519 AAAA', created_at: new Date().toISOString() }],
   });
 
-  await page.getByRole('button', { name: 'Connect server' }).click();
+  await page.getByText('web-node', { exact: true }).click();
   await expect(page.locator('.xterm')).toBeVisible();
 
   await page.locator('.xterm').click();
@@ -187,4 +189,28 @@ test('ssh terminal session survives view switches', async ({ page }) => {
 
   await expect(page.locator('.xterm')).toContainText('mock ssh session ready');
   await expect(page.getByText('ubuntu@10.0.0.66', { exact: true })).toBeVisible();
+});
+
+test('duplicate creates a named copy in the same group', async ({ page }) => {
+  await boot(page, { servers: [makeServer({ id: 'srv-d', name: 'db', host: '10.0.0.9' })] });
+  await expect(page.getByText('db', { exact: true })).toBeVisible();
+
+  await page.getByText('db', { exact: true }).click({ button: 'right' });
+  await page.getByRole('button', { name: 'Duplicate' }).click();
+
+  await expect(page.getByText('db (copy)', { exact: true })).toBeVisible();
+});
+
+test('duplicate from favorites view does not leak into favorites list', async ({ page }) => {
+  await boot(page, { servers: [makeServer({ id: 'srv-f', name: 'db', host: '10.0.0.9', favorite: true })] });
+  await expect(page.getByText('Favorites (1)', { exact: true })).toBeVisible();
+
+  await page.getByText('Favorites (1)', { exact: true }).click();
+  await expect(page.getByText('db', { exact: true })).toBeVisible();
+
+  await page.getByRole('listitem').filter({ hasText: 'db' }).first().click({ button: 'right' });
+  await page.getByRole('button', { name: 'Duplicate' }).click();
+
+  // The copy is not a favorite, so it must NOT appear in the favorites list.
+  await expect(page.getByText('db (copy)', { exact: true })).not.toBeVisible();
 });
