@@ -61,7 +61,7 @@ test('SSH key selection persists across edit and reload', async ({ page }) => {
   // attach key via edit form
   await expect(page.getByText('gitlab', { exact: true })).toBeVisible();
   await page.getByText('gitlab', { exact: true }).click({ button: 'right' });
-  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
 
   await page.getByRole('textbox', { name: 'SSH Key' }).click();
   await page.getByRole('option', { name: 'crewkey' }).click();
@@ -179,7 +179,7 @@ test('ssh terminal session survives view switches', async ({ page }) => {
     sshKeys: [{ id: 'key-001', name: 'crewkey', public_key: 'ssh-ed25519 AAAA', created_at: new Date().toISOString() }],
   });
 
-  await page.getByRole('button', { name: 'Connect server' }).click();
+  await page.getByText('web-node', { exact: true }).click();
   await expect(page.locator('.xterm')).toContainText('mock ssh session ready');
 
   // Switch to Settings and back to Servers — the terminal and its session must survive.
@@ -191,7 +191,7 @@ test('ssh terminal session survives view switches', async ({ page }) => {
   await expect(page.getByText('ubuntu@10.0.0.66', { exact: true })).toBeVisible();
 });
 
-test('duplicate creates a named copy in the same group', async ({ page }) => {
+test('duplicate creates a named copy of a server', async ({ page }) => {
   await boot(page, { servers: [makeServer({ id: 'srv-d', name: 'db', host: '10.0.0.9' })] });
   await expect(page.getByText('db', { exact: true })).toBeVisible();
 
@@ -213,4 +213,8 @@ test('duplicate from favorites view does not leak into favorites list', async ({
 
   // The copy is not a favorite, so it must NOT appear in the favorites list.
   await expect(page.getByText('db (copy)', { exact: true })).not.toBeVisible();
+
+  // Prove the clone actually happened: leave the favorites view and confirm the copy exists.
+  await page.getByText(/^All Servers/).click();
+  await expect(page.getByText('db (copy)', { exact: true })).toBeVisible();
 });
