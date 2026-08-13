@@ -119,7 +119,11 @@ jobs:
           mkdir -p portable
           cp "$EXE" "portable/Remote Manager.exe"
           if [ -d "src-tauri/target/${{ env.RUST_TARGET }}/release/resources" ]; then
-            cp -r "src-tauri/target/${{ env.RUST_TARGET }}/release/resources/." "portable/"
+            # Copy resources but exclude the WebView2 bootstrapper — it triggers
+            # AV (e.g. Trellix) false positives and is unnecessary on modern
+            # Windows where WebView2 Runtime is preinstalled.
+            find "src-tauri/target/${{ env.RUST_TARGET }}/release/resources" -type f \
+              ! -name "MicrosoftEdgeWebview2Setup.exe" -exec cp {} "portable/" \;
           fi
           cd portable
           powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../portable-tmp.zip -Force"
