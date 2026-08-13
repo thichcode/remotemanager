@@ -1,12 +1,14 @@
 import { Box, Text, Group, ActionIcon, Stack, Divider, TextInput, Button, Modal, SegmentedControl, Notification, Loader } from '@mantine/core';
 import { IconPlus, IconServer, IconStar, IconFolder, IconChevronRight, IconDownload, IconClock, IconRotate } from '@tabler/icons-react';
 import { useStore } from '../store/useStore';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { exportCsv, exportJson } from '../services/tauri';
 import { notifications } from '@mantine/notifications';
 import { modals } from '@mantine/modals';
 import { save } from '@tauri-apps/plugin-dialog';
 import { GroupServerTree } from './GroupServerTree';
+import { ServerContextMenu } from './ServerContextMenu';
+import type { ContextMenuState } from './ServerContextMenu';
 import { ServerForm } from './ServerForm';
 import { SftpBrowser } from './SftpBrowser';
 import type { Server } from '../types';
@@ -33,6 +35,10 @@ export function Sidebar() {
   const [newGroupName, setNewGroupName] = useState('');
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const openContextMenu = useCallback((server: Server, x: number, y: number) => {
+    setContextMenu({ x, y, server });
+  }, []);
 
   const activeTab = sessionTabs.find((t) => t.id === activeSessionTabId && t.protocol === 'ssh');
   const activeServer = activeTab?.serverId ? servers.find((s) => s.id === activeTab!.serverId) ?? null : null;
@@ -65,6 +71,7 @@ export function Sidebar() {
 
   return (
     <Box>
+      <ServerContextMenu state={contextMenu} onClose={() => setContextMenu(null)} />
       {isLoading && (
         <Group justify="center" py="xs"><Loader size="xs" /><Text size="xs" c="dimmed">Loading...</Text></Group>
       )}
@@ -186,7 +193,7 @@ export function Sidebar() {
                   <IconFolder size={14} />
                   <Text size="sm" style={{ flex: 1 }}>{group.name}</Text>
                 </Group>
-                {isExpanded && <GroupServerTree servers={groupSrvs} />}
+                {isExpanded && <GroupServerTree servers={groupSrvs} onOpenMenu={openContextMenu} />}
               </Box>
             );
           })
@@ -195,14 +202,14 @@ export function Sidebar() {
         {ungroupedServers.length > 0 && (
           <Box>
             <Text size="xs" c="dimmed" p="xs">Ungrouped</Text>
-            <GroupServerTree servers={ungroupedServers} />
+            <GroupServerTree servers={ungroupedServers} onOpenMenu={openContextMenu} />
           </Box>
         )}
 
         {selectedGroupId === '__recent__' && recentServers.length > 0 && (
           <Box>
             <Text size="xs" c="dimmed" p="xs">Recently connected</Text>
-            <GroupServerTree servers={recentServers} />
+            <GroupServerTree servers={recentServers} onOpenMenu={openContextMenu} />
           </Box>
         )}
 

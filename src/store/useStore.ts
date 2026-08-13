@@ -143,7 +143,10 @@ export const useStore = create<AppState>((set, get) => ({
     const src = get().servers.find(s => s.id === id);
     if (src) {
       const cloned = { ...src, id: newId, name: `${src.name} (copy)`, favorite: false, last_connected_at: null };
-      set({ servers: [...get().servers, cloned] });
+      const gid = get().selectedGroupId;
+      set({
+        servers: gid === FAVORITES_ID ? get().servers : [...get().servers, cloned],
+      });
     } else {
       await get().loadServers();
     }

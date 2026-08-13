@@ -1,18 +1,18 @@
 import { useRef, useCallback } from 'react';
-import { Text, Group, ActionIcon, Stack, Badge, Tooltip } from '@mantine/core';
-import { IconTerminal, IconDeviceDesktop, IconPlayerPlay, IconPencil, IconTrash, IconStar, IconStarFilled } from '@tabler/icons-react';
+import { Text, Group, Stack, Badge, Tooltip } from '@mantine/core';
+import { IconTerminal, IconDeviceDesktop } from '@tabler/icons-react';
 import { useStore } from '../store/useStore';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import type { Server } from '../types';
-import { ServerForm } from './ServerForm';
 
 interface GroupServerTreeProps {
   servers: Server[];
+  onOpenMenu: (server: Server, x: number, y: number) => void;
 }
 
-export function GroupServerTree({ servers }: GroupServerTreeProps) {
-  const { openSession, openRdpTab, toggleFavorite, deleteServer, sessionTabs } = useStore();
+export function GroupServerTree({ servers, onOpenMenu }: GroupServerTreeProps) {
+  const { openSession, openRdpTab, deleteServer, sessionTabs } = useStore();
   const listRef = useRef<HTMLDivElement>(null);
   const activeSessionServerIds = new Set(sessionTabs.filter(t => t.status === 'connected' || t.status === 'connecting').map(t => t.serverId).filter(Boolean));
 
@@ -28,14 +28,6 @@ export function GroupServerTree({ servers }: GroupServerTreeProps) {
       notifications.show({ title: 'Error', message: msg, color: 'red' });
     }
   }, [openSession, openRdpTab]);
-
-  const handleEdit = useCallback((server: Server) => {
-    modals.open({
-      title: `Edit "${server.name}"`,
-      children: <ServerForm server={server} />,
-      size: 'lg',
-    });
-  }, []);
 
   const handleDelete = useCallback((server: Server) => {
     modals.openConfirmModal({
@@ -85,6 +77,7 @@ export function GroupServerTree({ servers }: GroupServerTreeProps) {
             aria-label={`${server.name} (${server.protocol.toUpperCase()}) ${server.host}:${server.port}`}
             onClick={() => handleConnect(server)}
             onDoubleClick={() => handleConnect(server)}
+            onContextMenu={(e) => { e.preventDefault(); onOpenMenu(server, e.clientX, e.clientY); }}
             onKeyDown={(e) => handleKeyDown(e, server)}
           >
             <Tooltip label={server.protocol.toUpperCase()}>
@@ -102,26 +95,6 @@ export function GroupServerTree({ servers }: GroupServerTreeProps) {
               </Group>
               <Text size="xs" c="dimmed" truncate>{server.host}:{server.port}</Text>
             </Stack>
-            <Tooltip label="Toggle favorite">
-              <ActionIcon size="sm" variant="subtle" aria-label="Toggle favorite" onClick={(e) => { e.stopPropagation(); toggleFavorite(server.id); }}>
-                {server.favorite ? <IconStarFilled size={12} color="yellow" /> : <IconStar size={12} />}
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip label="Connect">
-              <ActionIcon size="sm" variant="subtle" aria-label="Connect server" onClick={(e) => { e.stopPropagation(); handleConnect(server); }}>
-                <IconPlayerPlay size={12} />
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip label="Edit">
-              <ActionIcon size="sm" variant="subtle" aria-label="Edit server" onClick={(e) => { e.stopPropagation(); handleEdit(server); }}>
-                <IconPencil size={12} />
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip label="Delete">
-              <ActionIcon size="sm" variant="subtle" aria-label="Delete server" color="red" onClick={(e) => { e.stopPropagation(); handleDelete(server); }}>
-                <IconTrash size={12} />
-              </ActionIcon>
-            </Tooltip>
           </Group>
         );
       })}
