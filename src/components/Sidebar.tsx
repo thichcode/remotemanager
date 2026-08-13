@@ -39,6 +39,7 @@ export function Sidebar() {
   const openContextMenu = useCallback((server: Server, x: number, y: number) => {
     setContextMenu({ x, y, server });
   }, []);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
   const activeTab = sessionTabs.find((t) => t.id === activeSessionTabId && t.protocol === 'ssh');
   const activeServer = activeTab?.serverId ? servers.find((s) => s.id === activeTab!.serverId) ?? null : null;
@@ -71,7 +72,7 @@ export function Sidebar() {
 
   return (
     <Box>
-      <ServerContextMenu state={contextMenu} onClose={() => setContextMenu(null)} />
+      <ServerContextMenu state={contextMenu} onClose={closeContextMenu} />
       {isLoading && (
         <Group justify="center" py="xs"><Loader size="xs" /><Text size="xs" c="dimmed">Loading...</Text></Group>
       )}
