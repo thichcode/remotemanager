@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useCallback } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { listen } from '@tauri-apps/api/event';
@@ -34,7 +35,46 @@ export function Terminal({ tab, active }: Props) {
   const fitRef = useRef<FitAddon | null>(null);
   const sessionRef = useRef<string | null>(tab.sessionId);
   const pendingRef = useRef<number[][]>([]);
+  const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  const fitRafRef = useRef<number | null>(null);
   const fontSize = useStore((s) => s.settings?.font_size ?? 13);
+
+  const sendResize = useCallback((t: XTerm) => {
+    const sid = sessionRef.current;
+    if (!sid) return;
+    const prev = lastSizeRef.current;
+    if (prev && prev.cols === t.cols && prev.rows === t.rows) return;
+    lastSizeRef.current = { cols: t.cols, rows: t.rows };
+    sshResize(sid, t.cols, t.rows).catch(() => {});
+  }, []);
+
+  const fit = useCallback(() => {
+    const t = termRef.current;
+    const f = fitRef.current;
+    const el = containerRef.current;
+    if (!t || !f || !el || el.offsetParent === null) return;
+    f.fit();
+    sendResize(t);
+  }, [sendResize]);
+
+  // debounce fit through a single rAF per frame so resize storms don't
+  // resize the pty repeatedly (prevents TUI apps like htop from jumping)
+  const scheduleFit = useCallback(() => {
+    if (fitRafRef.current !== null) return;
+    fitRafRef.current = requestAnimationFrame(() => {
+      fitRafRef.current = null;
+      fit();
+    });
+  }, [fit]);
+
+  useEffect(() => {
+    return () => {
+      if (fitRafRef.current !== null) {
+        cancelAnimationFrame(fitRafRef.current);
+        fitRafRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     sessionRef.current = tab.sessionId;
@@ -51,18 +91,17 @@ export function Terminal({ tab, active }: Props) {
   useEffect(() => {
     if (termRef.current || !containerRef.current) return;
     const term = new XTerm({
-      convertEol: true,
       fontFamily: 'Consolas, monospace',
       fontSize,
       cursorBlink: true,
       theme: { background: '#0d1117', foreground: '#e6edf3' },
     });
-    const fit = new FitAddon();
-    term.loadAddon(fit);
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
     term.open(containerRef.current);
-    fit.fit();
     termRef.current = term;
-    fitRef.current = fit;
+    fitRef.current = fitAddon;
+    scheduleFit();
 
     term.onData((data) => {
       const bytes = Array.from(new TextEncoder().encode(data));
@@ -77,9 +116,7 @@ export function Terminal({ tab, active }: Props) {
     term.attachCustomKeyEventHandler((e) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'R') {
         term.reset();
-        fit.fit();
-        const sid = sessionRef.current;
-        if (sid) sshResize(sid, term.cols, term.rows).catch(() => {});
+        scheduleFit();
         return false;
       }
       return true;
@@ -113,39 +150,30 @@ export function Terminal({ tab, active }: Props) {
 
   // fit + resize when becoming active
   useEffect(() => {
-    if (active && fitRef.current && termRef.current) {
-      const t = termRef.current;
-      fitRef.current.fit();
-      t.focus();
-      const sid = sessionRef.current;
-      if (sid) sshResize(sid, t.cols, t.rows).catch(() => {});
+    if (active) {
+      scheduleFit();
+      termRef.current?.focus();
     }
-  }, [active]);
+  }, [active, scheduleFit]);
 
   // fit when the container actually has size (window resizes and when the
   // servers view becomes visible again after a view switch)
   useEffect(() => {
     if (!containerRef.current) return;
-    const fit = () => {
-      const el = containerRef.current;
-      if (!active || !fitRef.current || !termRef.current || !el || el.offsetParent === null) return;
-      fitRef.current.fit();
-      const t = termRef.current;
-      const sid = sessionRef.current;
-      if (sid) sshResize(sid, t.cols, t.rows).catch(() => {});
-    };
-    const observer = new ResizeObserver(fit);
+    const observer = new ResizeObserver(() => {
+      if (active) scheduleFit();
+    });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, [active]);
+  }, [active, scheduleFit]);
 
   // update font size when settings change
   useEffect(() => {
     if (termRef.current) {
       termRef.current.options.fontSize = fontSize;
-      fitRef.current?.fit();
+      scheduleFit();
     }
-  }, [fontSize]);
+  }, [fontSize, scheduleFit]);
 
   if (tab.status === 'closed' && !tab.sessionId) {
     return (

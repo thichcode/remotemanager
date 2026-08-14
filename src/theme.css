@@ -1,0 +1,53 @@
+[data-mantine-color-scheme='light'] {
+  --mantine-color-body: #f6f8fa;
+  --mantine-color-text: #1f2328;
+  --mantine-color-dimmed: #57606a;
+  --mantine-color-border: #d0d7de;
+}
+
+[data-mantine-color-scheme='dark'] {
+  --mantine-color-body: #0d1117;
+  --mantine-color-text: #e6edf3;
+  --mantine-color-dimmed: #8b949e;
+  --mantine-color-border: #30363d;
+}
+
+[data-mantine-color-scheme='light'] .mantine-AppShell-header,
+[data-mantine-color-scheme='light'] .mantine-AppShell-navbar {
+  background-color: #ffffff;
+  border-color: #d0d7de;
+}
+
+[data-mantine-color-scheme='dark'] .mantine-AppShell-header,
+[data-mantine-color-scheme='dark'] .mantine-AppShell-navbar {
+  background-color: #161b22;
+  border-color: #30363d;
+}
+
+.mantine-Tabs-tab {
+  font-weight: 500;
+}
+
+.mantine-Tabs-tab[data-active] {
+  font-weight: 700;
+}
+
+[data-mantine-color-scheme='light'] .mantine-Tabs-tab[data-active] {
+  background-color: #ffffff;
+  border-color: #d0d7de;
+  color: #0969da;
+}
+
+[data-mantine-color-scheme='dark'] .mantine-Tabs-tab[data-active] {
+  background-color: #21262d;
+  border-color: #30363d;
+  color: #58a6ff;
+}
+
+[data-mantine-color-scheme='light'] .mantine-Tabs-tab:not([data-active]):hover {
+  background-color: #eaeef2;
+}
+
+[data-mantine-color-scheme='dark'] .mantine-Tabs-tab:not([data-active]):hover {
+  background-color: #161b22;
+}
