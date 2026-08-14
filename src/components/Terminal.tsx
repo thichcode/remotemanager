@@ -78,14 +78,21 @@ export function Terminal({ tab, active }: Props) {
 
   useEffect(() => {
     sessionRef.current = tab.sessionId;
-    if (tab.sessionId && pendingRef.current.length) {
-      const pending = pendingRef.current;
-      pendingRef.current = [];
-      for (const bytes of pending) {
-        sshWrite(tab.sessionId, bytes).catch(() => {});
+    if (tab.sessionId) {
+      // The pty is spawned with a default 80x24 size before the session id
+      // exists. If the first fit() ran while sessionId was still null, the
+      // resize was dropped and the pty keeps the wrong size, garbling all
+      // multi-line output. Re-fit now that the session is connected.
+      scheduleFit();
+      if (pendingRef.current.length) {
+        const pending = pendingRef.current;
+        pendingRef.current = [];
+        for (const bytes of pending) {
+          sshWrite(tab.sessionId, bytes).catch(() => {});
+        }
       }
     }
-  }, [tab.sessionId]);
+  }, [tab.sessionId, scheduleFit]);
 
   // init xterm once
   useEffect(() => {
@@ -101,6 +108,16 @@ export function Terminal({ tab, active }: Props) {
     term.open(containerRef.current);
     termRef.current = term;
     fitRef.current = fitAddon;
+
+    // FitAddon measures the cell size to compute cols/rows. If the font is
+    // not loaded yet, xterm falls back to a generic metric, cols are
+    // over-estimated and the pty is resized to a wrong width, which garbles
+    // all multi-line output. Re-fit once the fonts are ready.
+    if (typeof document !== 'undefined' && 'fonts' in document) {
+      document.fonts.ready.then(() => {
+        if (termRef.current === term) scheduleFit();
+      }).catch(() => {});
+    }
     scheduleFit();
 
     term.onData((data) => {
