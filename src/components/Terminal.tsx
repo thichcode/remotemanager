@@ -4,6 +4,7 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { listen } from '@tauri-apps/api/event';
 import { sshWrite, sshResize } from '../services/tauri';
+import { LogHighlighter } from '../lib/logHighlight';
 import { Stack, Text } from '@mantine/core';
 import { useStore } from '../store/useStore';
 import type { SessionTab } from '../types';
@@ -38,6 +39,7 @@ export function Terminal({ tab, active }: Props) {
   const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const fitRafRef = useRef<number | null>(null);
   const fontSize = useStore((s) => s.settings?.font_size ?? 13);
+  const highlightRef = useRef<LogHighlighter | null>(null);
 
   const sendResize = useCallback((t: XTerm) => {
     const sid = sessionRef.current;
@@ -78,6 +80,7 @@ export function Terminal({ tab, active }: Props) {
 
   useEffect(() => {
     sessionRef.current = tab.sessionId;
+    highlightRef.current?.reset();
     if (tab.sessionId) {
       // The pty is spawned with a default 80x24 size before the session id
       // exists. If the first fit() ran while sessionId was still null, the
@@ -108,6 +111,7 @@ export function Terminal({ tab, active }: Props) {
     term.open(containerRef.current);
     termRef.current = term;
     fitRef.current = fitAddon;
+    highlightRef.current = new LogHighlighter();
 
     // FitAddon measures the cell size to compute cols/rows. If the font is
     // not loaded yet, xterm falls back to a generic metric, cols are
@@ -133,6 +137,7 @@ export function Terminal({ tab, active }: Props) {
     term.attachCustomKeyEventHandler((e) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'R') {
         term.reset();
+        highlightRef.current?.reset();
         scheduleFit();
         return false;
       }
@@ -141,10 +146,14 @@ export function Terminal({ tab, active }: Props) {
 
     const unlistenOutput = listen<{ sessionId: string; data: number[] }>('ssh://output', (event) => {
       if (event.payload.sessionId !== sessionRef.current) return;
-      term.write(new Uint8Array(event.payload.data));
+      const hl = highlightRef.current;
+      const data = new Uint8Array(event.payload.data);
+      term.write(hl ? hl.feed(data) : data);
     });
     const unlistenExit = listen<{ sessionId: string; code: number }>('ssh://exit', (event) => {
       if (event.payload.sessionId !== sessionRef.current) return;
+      const hl = highlightRef.current;
+      if (hl) term.write(hl.flush());
       term.write(`\r\n\x1b[31mConnection closed (${exitCodeMessage(event.payload.code)})\x1b[0m\r\n`);
       (term.options as { readonly?: boolean }).readonly = true;
     });
@@ -162,6 +171,7 @@ export function Terminal({ tab, active }: Props) {
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
+      highlightRef.current = null;
     };
   }, []);
 
