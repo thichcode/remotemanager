@@ -28,6 +28,50 @@ pub struct RdpSessionResult {
 
 type SharedWs = Arc<Mutex<tungstenite::WebSocket<TcpStream>>>;
 
+/// Returns true when a WebSocket read error is just a socket timeout,
+/// meaning no message has arrived yet and the read should be retried
+/// instead of treating it as a connection failure.
+fn is_ws_timeout(err: &tungstenite::Error) -> bool {
+    matches!(
+        err,
+        tungstenite::Error::Io(ref e)
+            if e.kind() == std::io::ErrorKind::WouldBlock
+                || e.kind() == std::io::ErrorKind::TimedOut
+    )
+}
+
+/// Run the WebSocket reader loop: forward client input events to the relay
+/// until the client disconnects or the session is asked to stop.
+fn run_ws_reader(
+    ws: SharedWs,
+    input_tx: mpsc::Sender<input::ClientEvent>,
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
+    while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+        let msg = {
+            let mut guard = ws.lock().unwrap();
+            guard.read()
+        };
+        match msg {
+            Ok(tungstenite::Message::Binary(data)) => {
+                if let Some(event) = input::ClientEvent::parse(&data) {
+                    let _ = input_tx.send(event);
+                }
+            }
+            Ok(tungstenite::Message::Close(_)) => break,
+            Err(ref e) if is_ws_timeout(e) => {
+                // Yield the lock for a moment so the main loop gets a real
+                // window to write frames instead of losing a microsecond race
+                // against this re-lock.
+                std::thread::sleep(std::time::Duration::from_millis(1));
+                continue;
+            }
+            Err(_) => break,
+            _ => {}
+        }
+    }
+}
+
 /// Copy a bitmap region into the full-screen framebuffer handling stride.
 ///
 /// `data` is `buf_width`-wide (may be larger than the dest region width).
@@ -106,6 +150,14 @@ pub fn start_session(params: RdpSessionParams) -> Result<RdpSessionResult, Strin
 
                         match tungstenite::accept(tcp_stream) {
                             Ok(ws_stream) => {
+                                // Without a read timeout a blocking `read()`
+                                // in the reader thread would hold the ws mutex
+                                // forever, starving the main loop so frames
+                                // only reach the client while it is sending
+                                // input. A short timeout releases the lock.
+                                let _ = ws_stream
+                                    .get_ref()
+                                    .set_read_timeout(Some(std::time::Duration::from_millis(50)));
                                 let ws: SharedWs = Arc::new(Mutex::new(ws_stream));
 
                                 // Connect to RDP server
@@ -142,32 +194,19 @@ pub fn start_session(params: RdpSessionParams) -> Result<RdpSessionResult, Strin
                                     let _ = guard.write(tungstenite::Message::Binary(
                                         frame::encode_init(width, height),
                                     ));
+                                    let _ = guard.flush();
                                 }
 
                                 let (input_tx, input_rx) = mpsc::channel::<input::ClientEvent>();
+                                let reader_stop =
+                                    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
                                 // Spawn WebSocket reader thread
                                 let ws_reader = ws.clone();
+                                let reader_stop_ref = reader_stop.clone();
                                 let ws_read_thread = thread::Builder::new()
                                     .name("rdp-ws-reader".into())
-                                    .spawn(move || {
-                                        loop {
-                                            let msg = {
-                                                let mut guard = ws_reader.lock().unwrap();
-                                                guard.read()
-                                            };
-                                            match msg {
-                                                Ok(tungstenite::Message::Binary(data)) => {
-                                                    if let Some(event) = input::ClientEvent::parse(&data) {
-                                                        let _ = input_tx.send(event);
-                                                    }
-                                                }
-                                                Ok(tungstenite::Message::Close(_)) => break,
-                                                Err(_) => break,
-                                                _ => {}
-                                            }
-                                        }
-                                    })
+                                    .spawn(move || run_ws_reader(ws_reader, input_tx, reader_stop_ref))
                                     .ok();
 
                                 // Main loop: read RDP events, write to WebSocket
@@ -178,6 +217,15 @@ pub fn start_session(params: RdpSessionParams) -> Result<RdpSessionResult, Strin
 
                                 let mut running = true;
                                 while running {
+                                    // Stop the active session when a close was
+                                    // requested (the outer accept loop only
+                                    // checks shutdown between connections, so a
+                                    // running session would otherwise linger).
+                                    if shutdown_rx.try_recv().is_ok() {
+                                        info!("RDP session shutdown requested during session");
+                                        break;
+                                    }
+
                                     // Drain input from channel
                                     while let Ok(event) = input_rx.try_recv() {
                                         match event {
@@ -229,6 +277,7 @@ pub fn start_session(params: RdpSessionParams) -> Result<RdpSessionResult, Strin
                                                     );
                                                     let mut guard = ws.lock().unwrap();
                                                     let _ = guard.write(tungstenite::Message::Binary(frame));
+                                                    let _ = guard.flush();
                                                 }
                                             }
                                             _ => {}
@@ -247,8 +296,12 @@ pub fn start_session(params: RdpSessionParams) -> Result<RdpSessionResult, Strin
                                     let _ = guard.write(tungstenite::Message::Binary(
                                         frame::encode_closed(),
                                     ));
+                                    let _ = guard.flush();
                                 }
 
+                                // Signal the reader thread to stop and wait for it
+                                // to release the WebSocket before this scope ends.
+                                reader_stop.store(true, std::sync::atomic::Ordering::Relaxed);
                                 if let Some(t) = ws_read_thread {
                                     let _ = t.join();
                                 }
@@ -277,7 +330,29 @@ pub fn start_session(params: RdpSessionParams) -> Result<RdpSessionResult, Strin
 
 #[cfg(test)]
 mod tests {
-    use super::blit_bitmap_region;
+    use super::{blit_bitmap_region, is_ws_timeout, run_ws_reader, SharedWs};
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::{mpsc, Arc, Mutex};
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    fn setup_ws_pair() -> (SharedWs, tungstenite::WebSocket<TcpStream>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut ws = tungstenite::accept(stream).unwrap();
+            let _ = ws.get_ref().set_read_timeout(Some(Duration::from_millis(50)));
+            Arc::new(Mutex::new(ws))
+        });
+
+        let client_stream = TcpStream::connect(addr).unwrap();
+        let (mut client, _) = tungstenite::client("ws://127.0.0.1/", client_stream).unwrap();
+
+        let ws: SharedWs = server.join().unwrap();
+        (ws, client)
+    }
 
     fn bgra(r: u8, g: u8, b: u8) -> [u8; 4] {
         [b, g, r, 0xFF]
@@ -354,5 +429,83 @@ mod tests {
         assert!(blit_bitmap_region(&mut fb, 4, 4, &data, 4, 0, 0, 5, 1).is_none());
         assert!(blit_bitmap_region(&mut fb, 4, 4, &data, 4, 0, 0, 1, 9).is_none());
         assert!(blit_bitmap_region(&mut fb, 4, 4, &[], 4, 0, 0, 1, 1).is_none());
+    }
+
+    #[test]
+    fn is_ws_timeout_classifies_socket_timeouts() {
+        use std::io::ErrorKind;
+        assert!(is_ws_timeout(&tungstenite::Error::Io(ErrorKind::WouldBlock.into())));
+        assert!(is_ws_timeout(&tungstenite::Error::Io(ErrorKind::TimedOut.into())));
+        assert!(!is_ws_timeout(&tungstenite::Error::Io(ErrorKind::ConnectionReset.into())));
+        assert!(!is_ws_timeout(&tungstenite::Error::ConnectionClosed));
+    }
+
+    #[test]
+    fn reader_releases_ws_lock_while_idle() {
+        // Regression: a blocking read on a non-timeout socket holds the ws
+        // mutex forever, starving the main loop so frames only flow while the
+        // user is sending input. With a read timeout, `guard.read()` must
+        // return (Err::WouldBlock/TimedOut) and the lock must be released.
+        let (ws, mut client) = setup_ws_pair();
+        let (input_tx, _input_rx) = mpsc::channel();
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let ws_reader = ws.clone();
+        let reader_stop = stop.clone();
+        let reader = thread::spawn(move || run_ws_reader(ws_reader, input_tx, reader_stop));
+
+        // Give the reader time to grab the lock and block on read().
+        thread::sleep(Duration::from_millis(200));
+
+        // The main loop must be able to acquire the lock (and write a frame)
+        // within a bounded time even though no client input is arriving.
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut wrote = false;
+        while Instant::now() < deadline {
+            if let Ok(mut guard) = ws.try_lock() {
+                let _ = guard.write(tungstenite::Message::Binary(vec![0u8; 4]));
+                wrote = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(wrote, "main loop starved: reader holds the ws lock during blocking read");
+
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        client.close(None).unwrap();
+        let _ = reader.join();
+    }
+
+    #[test]
+    fn reader_forward_client_events_to_channel() {
+        let (ws, mut client) = setup_ws_pair();
+        let (input_tx, input_rx) = mpsc::channel::<super::input::ClientEvent>();
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let ws_reader = ws.clone();
+        let reader_stop = stop.clone();
+        let reader = thread::spawn(move || run_ws_reader(ws_reader, input_tx, reader_stop));
+
+        // A mouse event encoded the same way the frontend encodes it:
+        // 0x10, x(u16le), y(u16le), button_mask, event_type.
+        let mut bytes = Vec::with_capacity(7);
+        bytes.push(0x10);
+        bytes.extend_from_slice(&12u16.to_le_bytes());
+        bytes.extend_from_slice(&34u16.to_le_bytes());
+        bytes.extend_from_slice(&[0x00, 0x00]);
+        client.write(tungstenite::Message::Binary(bytes)).unwrap();
+        client.flush().unwrap();
+
+        let received = input_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        match received {
+            super::input::ClientEvent::Mouse { x, y, .. } => {
+                assert_eq!((x, y), (12, 34));
+            }
+            other => panic!("unexpected event: {:?}", other),
+        }
+
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        client.close(None).unwrap();
+        let _ = reader.join();
     }
 }
