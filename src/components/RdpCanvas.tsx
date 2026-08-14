@@ -5,6 +5,7 @@ import type { SessionTab } from '../types';
 
 const MSG_FRAME = 0x01;
 const MSG_CLOSED = 0x02;
+const MSG_INIT = 0x03;
 const MSG_MOUSE = 0x10;
 const MSG_KEYBOARD = 0x11;
 
@@ -63,17 +64,19 @@ export function RdpCanvas({ tab }: RdpCanvasProps) {
 
       const msgType = data[0];
 
-      if (msgType === MSG_FRAME && data.length >= 13) {
+      if (msgType === MSG_INIT && data.length >= 5) {
+        const screenW = new DataView(data.buffer, data.byteOffset).getUint16(1, true);
+        const screenH = new DataView(data.buffer, data.byteOffset).getUint16(3, true);
+        canvas.width = screenW;
+        canvas.height = screenH;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, screenW, screenH);
+      } else if (msgType === MSG_FRAME && data.length >= 13) {
         const width = new DataView(data.buffer, data.byteOffset).getUint16(1, true);
         const height = new DataView(data.buffer, data.byteOffset).getUint16(3, true);
         const x = new DataView(data.buffer, data.byteOffset).getUint32(5, true);
         const y = new DataView(data.buffer, data.byteOffset).getUint32(9, true);
         const bgra = data.slice(13);
-
-        if (canvas.width !== width || canvas.height !== height) {
-          canvas.width = width;
-          canvas.height = height;
-        }
 
         // Convert BGRA to RGBA (force opaque alpha)
         const rgba = new Uint8ClampedArray(bgra.length);

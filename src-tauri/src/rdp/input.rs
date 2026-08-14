@@ -61,23 +61,16 @@ impl ClientEvent {
                     0x01 => PointerButton::Left,
                     0x02 => PointerButton::Right,
                     0x04 => PointerButton::Middle,
-                    _ => PointerButton::Left,
+                    _ => PointerButton::None,
                 };
-                if *event_type == 0 {
-                    Some(RdpEvent::Pointer(PointerEvent {
-                        x: *x,
-                        y: *y,
-                        button: PointerButton::Left,
-                        down: false,
-                    }))
-                } else {
-                    Some(RdpEvent::Pointer(PointerEvent {
-                        x: *x,
-                        y: *y,
-                        button,
-                        down: *event_type == 1,
-                    }))
-                }
+                // event_type: 0 = move, 1 = button down, 2 = button up
+                let down = *event_type == 1;
+                Some(RdpEvent::Pointer(PointerEvent {
+                    x: *x,
+                    y: *y,
+                    button,
+                    down,
+                }))
             }
             ClientEvent::Keyboard { scan_code, down } => {
                 Some(RdpEvent::Key(KeyboardEvent {
@@ -87,5 +80,87 @@ impl ClientEvent {
             }
             ClientEvent::Resize { .. } => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mouse(x: u16, y: u16, mask: u8, event_type: u8) -> PointerEvent {
+        match (ClientEvent::Mouse { x, y, button_mask: mask, event_type })
+            .to_rdp_event()
+            .expect("mouse maps to event")
+        {
+            RdpEvent::Pointer(p) => p,
+            _ => panic!("expected pointer event"),
+        }
+    }
+
+    fn is_button(p: &PointerEvent, expected: PointerButton, down: bool) -> bool {
+        p.button == expected && p.down == down
+    }
+
+    #[test]
+    fn mouse_move_is_not_a_click() {
+        // Moving the mouse must NOT tell the server button 1 is pressed,
+        // otherwise the server thinks we are dragging and selects text.
+        let p = mouse(100, 200, 0, 0);
+        assert!(is_button(&p, PointerButton::None, false));
+        assert_eq!((p.x, p.y), (100, 200));
+    }
+
+    #[test]
+    fn mouse_move_preserves_coordinates() {
+        let p = mouse(0, 768, 0, 0);
+        assert_eq!((p.x, p.y), (0, 768));
+    }
+
+    #[test]
+    fn mouse_left_down() {
+        let p = mouse(10, 20, 0x01, 1);
+        assert!(is_button(&p, PointerButton::Left, true));
+    }
+
+    #[test]
+    fn mouse_left_up() {
+        let p = mouse(10, 20, 0x01, 2);
+        assert!(is_button(&p, PointerButton::Left, false));
+    }
+
+    #[test]
+    fn mouse_right_down() {
+        let p = mouse(10, 20, 0x02, 1);
+        assert!(is_button(&p, PointerButton::Right, true));
+    }
+
+    #[test]
+    fn mouse_middle_down() {
+        let p = mouse(10, 20, 0x04, 1);
+        assert!(is_button(&p, PointerButton::Middle, true));
+    }
+
+    #[test]
+    fn keyboard_down_and_up() {
+        let d = ClientEvent::Keyboard { scan_code: 0x1E, down: true }
+            .to_rdp_event()
+            .expect("keyboard down");
+        match d {
+            RdpEvent::Key(k) => { assert!(k.down); assert_eq!(k.code, 0x1E); }
+            _ => panic!("expected key event"),
+        }
+
+        let u = ClientEvent::Keyboard { scan_code: 0x1E, down: false }
+            .to_rdp_event()
+            .expect("keyboard up");
+        match u {
+            RdpEvent::Key(k) => { assert!(!k.down); }
+            _ => panic!("expected key event"),
+        }
+    }
+
+    #[test]
+    fn resize_is_ignored() {
+        assert!(ClientEvent::Resize { width: 800, height: 600 }.to_rdp_event().is_none());
     }
 }
