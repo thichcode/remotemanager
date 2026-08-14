@@ -28,15 +28,25 @@ export class LogHighlighter {
   feed(chunk: Uint8Array): Uint8Array {
     this.updateAlternateScreen(chunk);
     const result: number[] = [];
+    let foundNewline = false;
     for (let i = 0; i < chunk.length; i++) {
       const byte = chunk[i];
       if (byte === 0x0a) {
+        foundNewline = true;
         result.push(...this.highlightLine(new Uint8Array(this.pending)));
         this.pending = [];
         result.push(0x0a);
       } else {
         this.pending.push(byte);
       }
+    }
+    if (!foundNewline) {
+      // No newline in this chunk — return raw bytes so the terminal
+      // always displays output even without line breaks (prompts,
+      // cursor init sequences, etc.).  Clear pending to avoid
+      // duplicate output when the next newline-triggered flush arrives.
+      this.pending = [];
+      return chunk;
     }
     return new Uint8Array(result);
   }
