@@ -1,6 +1,6 @@
 [package]
 name = "remote-manager-mvp"
-version = "0.8.1"
+version = "0.8.2"
 description = "Remote Manager for Windows SysAdmin"
 authors = ["you"]
 license = ""
@@ -37,6 +37,9 @@ russh-sftp = "2.3"
 tokio-tungstenite = "0.24"
 tungstenite = "0.24"
 rdp-rs = "0.1"
+
+[patch.crates-io]
+rdp-rs = { path = "vendor/rdp-rs" }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

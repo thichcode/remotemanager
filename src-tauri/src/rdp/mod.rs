@@ -122,6 +122,11 @@ pub fn start_session(params: RdpSessionParams) -> Result<RdpSessionResult, Strin
                                     .ok();
 
                                 // Main loop: read RDP events, write to WebSocket
+                                let mut framebuffer = vec![0u8; width as usize * height as usize * 4];
+                                for px in (0..framebuffer.len()).step_by(4) {
+                                    framebuffer[px + 3] = 0xFF;
+                                }
+
                                 let mut running = true;
                                 while running {
                                     // Drain input from channel
@@ -140,22 +145,41 @@ pub fn start_session(params: RdpSessionParams) -> Result<RdpSessionResult, Strin
                                     let read_result = client.read(|event| {
                                         match event {
                                             RdpEvent::Bitmap(bitmap) => {
-                                                let dest_left = bitmap.dest_left;
-                                                let dest_top = bitmap.dest_top;
-                                                let w = bitmap.width;
-                                                let h = bitmap.height;
-                                                let bgra = if bitmap.is_compress {
+                                                let dest_left = bitmap.dest_left as usize;
+                                                let dest_top = bitmap.dest_top as usize;
+                                                let dest_right = bitmap.dest_right as usize;
+                                                let dest_bottom = bitmap.dest_bottom as usize;
+                                                let buf_width = bitmap.width as usize;
+
+                                                let data = if bitmap.is_compress {
                                                     bitmap.decompress().unwrap_or_default()
                                                 } else {
                                                     bitmap.data
                                                 };
-                                                if !bgra.is_empty() {
+
+                                                let region_w = dest_right.saturating_sub(dest_left) + 1;
+                                                let region_h = dest_bottom.saturating_sub(dest_top) + 1;
+                                                if !data.is_empty() && region_w > 0 && region_h > 0
+                                                    && dest_right < width as usize
+                                                    && dest_bottom < height as usize
+                                                {
+                                                    let screen_w = width as usize;
+                                                    for i in 0..region_h {
+                                                        let src_start = i * buf_width * 4;
+                                                        let dst_start = ((dest_top + i) * screen_w + dest_left) * 4;
+                                                        if let (Some(src), Some(dst)) = (
+                                                            data.get(src_start..src_start + region_w * 4),
+                                                            framebuffer.get_mut(dst_start..dst_start + region_w * 4),
+                                                        ) {
+                                                            dst.copy_from_slice(src);
+                                                        }
+                                                    }
                                                     let frame = frame::encode_frame(
-                                                        dest_left as u32,
-                                                        dest_top as u32,
-                                                        w,
-                                                        h,
-                                                        &bgra,
+                                                        0,
+                                                        0,
+                                                        width,
+                                                        height,
+                                                        &framebuffer,
                                                     );
                                                     let mut guard = ws.lock().unwrap();
                                                     let _ = guard.write(tungstenite::Message::Binary(frame));

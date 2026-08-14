@@ -75,13 +75,13 @@ export function RdpCanvas({ tab }: RdpCanvasProps) {
           canvas.height = height;
         }
 
-        // Convert BGRA to RGBA
+        // Convert BGRA to RGBA (force opaque alpha)
         const rgba = new Uint8ClampedArray(bgra.length);
         for (let i = 0; i < bgra.length; i += 4) {
           rgba[i] = bgra[i + 2];     // R
           rgba[i + 1] = bgra[i + 1]; // G
           rgba[i + 2] = bgra[i];     // B
-          rgba[i + 3] = bgra[i + 3]; // A
+          rgba[i + 3] = 0xFF;        // A (opaque)
         }
 
         const imageData = new ImageData(rgba, width, height);
